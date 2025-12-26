@@ -20,12 +20,16 @@ builds:
       - amd64
     # 使用 musl 工具链静态链接，适配 OpenWrt
     env:
-      - CGO_ENABLED=1
-      - CC=aarch64-openwrt-linux-musl-gcc
+      - CGO_ENABLED=0
     flags:
       - -trimpath
     ldflags:
-      - -s -w -extldflags '-static'
+      - -s -w
+
+# upx:
+#   - enabled: true
+#     compress: best
+#     brute: true          # 再极致一点（可选）
 
 # 关掉不需要的流水线步骤
 archives:

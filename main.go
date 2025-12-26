@@ -4,92 +4,138 @@
 package main
 
 import (
-	"fmt"
+	"embed"
+	"encoding/json"
+	"flag"
+	"io/fs"
+	"log"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
-type diskStat struct {
-	name      string
-	readSect  uint64
-	writeSect uint64
-	timestamp time.Time
+type devIO struct {
+	Read  string `json:"read"`
+	Write string `json:"write"`
+	Unit  string `json:"unit"`
 }
 
+var (
+	// 实时速率（每秒更新）
+	ioMap  = map[string]devIO{}
+	ioLock sync.RWMutex
+	
+)
+
+//go:embed web
+var webEmb embed.FS
+
 func main() {
-	if len(os.Args) > 1 && os.Args[1] == "-h" {
-		fmt.Println("Usage: diskio")
-		fmt.Println("Print disk I/O (KB/s) every second.")
-		return
-	}
+	var (
+		host = flag.String("host", "127.0.0.1", "listen host")
+		port = flag.Int("port", 8080, "listen port")
+	)
+	flag.Parse()
 
-	prev := map[string]diskStat{}
-	ticker := time.NewTicker(1 * time.Second)
-	defer ticker.Stop()
+	go backgroundUpdate()
 
-	for range ticker.C {
-		curr, err := readDiskStats()
+	webFS, _ := fs.Sub(webEmb, "web")
+	http.Handle("/", http.FileServer(http.FS(webFS)))
+
+	addr := *host + ":" + strconv.Itoa(*port)
+	http.HandleFunc("/io", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "only GET", http.StatusMethodNotAllowed)
+			return
+		}
+		ioLock.RLock()
+		out := make(map[string]devIO, len(ioMap))
+		for k, v := range ioMap {
+			out[k] = v
+		}
+		ioLock.RUnlock()
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(out)
+	})
+
+	log.Printf("listen http://%s/io", addr)
+	log.Fatal(http.ListenAndServe(addr, nil))
+}
+
+// 后台每秒算一次差值，更新 ioMap
+func backgroundUpdate() {
+	prevSnap := map[string]diskSnap{}
+	prevTime := time.Now()
+
+	for {
+		time.Sleep(1 * time.Second)
+		currTime := time.Now()
+		currSnap, err := readDiskStats()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "read diskstats: %v\n", err)
+			continue
+		}
+		elapsed := currTime.Sub(prevTime).Seconds()
+		if elapsed <= 0 {
 			continue
 		}
 
+		tmp := make(map[string]devIO)
 		var totReadKB, totWriteKB float64
 
-		// 计算差值并打印
-		for name, now := range curr {
-			before, ok := prev[name]
+		for name, snap := range currSnap {
+			old, ok := prevSnap[name]
 			if !ok {
-				continue // 第一次出现，没有历史
-			}
-			elapsed := now.timestamp.Sub(before.timestamp).Seconds()
-			if elapsed <= 0 {
 				continue
 			}
-			// 1 扇区 = 512 字节
-			readKB := float64(now.readSect-before.readSect) * 512 / 1024 / elapsed
-			writeKB := float64(now.writeSect-before.writeSect) * 512 / 1024 / elapsed
-			fmt.Printf("%-10s  read=%7.1f KB/s  write=%7.1f KB/s\n",
-				name, readKB, writeKB)
-
+			readKB := float64(snap.readSect-old.readSect) * 512 / 1024 / elapsed
+			writeKB := float64(snap.writeSect-old.writeSect) * 512 / 1024 / elapsed
+			tmp[name] = devIO{
+				Read:  strconv.FormatFloat(readKB, 'f', 1, 64),
+				Write: strconv.FormatFloat(writeKB, 'f', 1, 64),
+				Unit:  "KB/s",
+			}
 			totReadKB += readKB
 			totWriteKB += writeKB
 		}
-		fmt.Printf("%-10s  read=%7.1f KB/s  write=%7.1f KB/s\n",
-			"TOTAL", totReadKB, totWriteKB)
-		prev = curr
+		tmp["total"] = devIO{
+			Read:  strconv.FormatFloat(totReadKB, 'f', 1, 64),
+			Write: strconv.FormatFloat(totWriteKB, 'f', 1, 64),
+			Unit:  "KB/s",
+		}
+
+		ioLock.Lock()
+		ioMap = tmp
+		ioLock.Unlock()
+
+		prevSnap, prevTime = currSnap, currTime
 	}
 }
 
-// readDiskStats 解析 /proc/diskstats，返回各设备最新统计
-func readDiskStats() (map[string]diskStat, error) {
+// 以下结构与之前相同
+type diskSnap struct{ readSect, writeSect uint64 }
+
+func readDiskStats() (map[string]diskSnap, error) {
 	data, err := os.ReadFile("/proc/diskstats")
 	if err != nil {
 		return nil, err
 	}
-	ts := time.Now()
-	res := make(map[string]diskStat)
+	res := map[string]diskSnap{}
 	for _, line := range strings.Split(string(data), "\n") {
 		f := strings.Fields(line)
 		if len(f) < 14 {
 			continue
 		}
-		// 简单过滤：只保留整盘（无数字后缀）和 mmcblk0 这类常见名
 		name := f[2]
-		if strings.HasPrefix(name, "loop") ||
-			strings.HasPrefix(name, "ram") {
+		if strings.HasPrefix(name, "loop") || strings.HasPrefix(name, "ram") {
 			continue
 		}
 		readSect, _ := strconv.ParseUint(f[5], 10, 64)
 		writeSect, _ := strconv.ParseUint(f[9], 10, 64)
-		res[name] = diskStat{
-			name:      name,
-			readSect:  readSect,
-			writeSect: writeSect,
-			timestamp: ts,
-		}
+		res[name] = diskSnap{readSect: readSect, writeSect: writeSect}
 	}
 	return res, nil
 }
