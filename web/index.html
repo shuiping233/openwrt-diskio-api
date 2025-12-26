@@ -51,14 +51,15 @@
         }
 
         .status-badge {
-            font-size: 0.8rem;
-            padding: 4px 8px;
+            font-size: 0.85rem;
+            padding: 6px 12px;
             border-radius: 4px;
             background-color: var(--card-bg);
             color: var(--text-secondary);
             display: flex;
             align-items: center;
-            gap: 6px;
+            gap: 10px;
+            border: 1px solid var(--border-color);
         }
 
         .status-dot {
@@ -66,6 +67,7 @@
             height: 8px;
             border-radius: 50%;
             background-color: var(--text-secondary);
+            flex-shrink: 0;
         }
 
         .status-dot.active {
@@ -75,6 +77,60 @@
 
         .status-dot.error {
             background-color: var(--error);
+        }
+
+        /* 刷新间隔下拉框样式 */
+        .refresh-select {
+            appearance: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            background-color: rgba(255, 255, 255, 0.1);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 4px 8px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            outline: none;
+            font-family: monospace;
+            text-align: center;
+            transition: background 0.2s, border-color 0.2s;
+        }
+
+        .refresh-select:hover {
+            background-color: rgba(255, 255, 255, 0.15);
+            border-color: var(--text-secondary);
+        }
+
+        .refresh-select:focus {
+            border-color: var(--accent-read);
+        }
+        
+        /* 下拉箭头自定义 (可选，这里简化处理，使用默认箭头但改色需特定浏览器支持，保持简洁) */
+        .refresh-select option {
+            background-color: var(--card-bg);
+            color: var(--text-primary);
+        }
+
+        /* 状态时间样式 */
+        #status-time {
+            font-family: monospace;
+            color: var(--text-primary);
+            font-size: 0.85rem;
+        }
+
+        .loading-spinner {
+            border: 2px solid rgba(255,255,255,0.1);
+            border-left-color: var(--text-primary);
+            border-radius: 50%;
+            width: 14px;
+            height: 14px;
+            animation: spin 1s linear infinite;
+            display: none;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
         }
 
         /* Total 区域：大卡片展示 */
@@ -119,7 +175,7 @@
         .total-value {
             font-size: 3rem;
             font-weight: 700;
-            font-variant-numeric: tabular-nums; /* 数字等宽，防止跳动 */
+            font-variant-numeric: tabular-nums;
         }
 
         .total-unit {
@@ -132,7 +188,6 @@
         .text-read { color: var(--accent-read); }
         .text-write { color: var(--accent-write); }
 
-        /* 装饰性背景条 */
         .bar-bg {
             position: absolute;
             bottom: 0;
@@ -202,21 +257,6 @@
             font-weight: 600;
         }
 
-        /* 加载动画 */
-        .loading-spinner {
-            border: 2px solid rgba(255,255,255,0.1);
-            border-left-color: var(--text-primary);
-            border-radius: 50%;
-            width: 14px;
-            height: 14px;
-            animation: spin 1s linear infinite;
-            display: none;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
         /* 提示信息 */
         #toast-container {
             position: fixed;
@@ -251,7 +291,20 @@
             </svg>
             I/O Monitor
         </h1>
+        <!-- 状态栏 -->
         <div class="status-badge">
+            <!-- 刷新间隔选择框 -->
+            <select id="refresh-select" class="refresh-select" title="选择刷新间隔">
+                <option value="1000">1s</option>
+                <option value="2000" selected>2s</option>
+                <option value="3000">3s</option>
+                <option value="5000">5s</option>
+                <option value="10000">10s</option>
+            </select>
+
+            <!-- 状态时间 -->
+            <span id="status-time">--</span>
+            
             <div id="status-dot" class="status-dot"></div>
             <span id="status-text">等待数据...</span>
             <div id="loading-spinner" class="loading-spinner"></div>
@@ -313,8 +366,7 @@
     <script>
         // 配置
         const API_URL = '/io';
-        const REFRESH_INTERVAL = 2000; // 2秒刷新一次
-
+        
         // DOM 元素引用
         const els = {
             totalReadVal: document.getElementById('total-read-val'),
@@ -324,9 +376,26 @@
             disksGrid: document.getElementById('disks-grid'),
             statusDot: document.getElementById('status-dot'),
             statusText: document.getElementById('status-text'),
+            statusTime: document.getElementById('status-time'),
+            refreshSelect: document.getElementById('refresh-select'), // 新增下拉框引用
             spinner: document.getElementById('loading-spinner'),
             toastContainer: document.getElementById('toast-container')
         };
+
+        // 定时器 ID，用于清除旧的定时器
+        let timerId = null;
+
+        // 获取当前格式化时间函数 
+        function getFormattedTime(){
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const seconds = String(now.getSeconds()).padStart(2, '0');
+            return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+        }
 
         // 辅助函数：显示 Toast 提示
         function showToast(message) {
@@ -365,8 +434,23 @@
                 els.statusText.textContent = '连接错误';
                 showToast(`无法获取数据: ${error.message}`);
             } finally {
+                // 无论成功失败，停止加载动画
                 els.spinner.style.display = 'none';
+                
+                // 每次请求结束后刷新时间
+                els.statusTime.textContent = getFormattedTime();
             }
+        }
+
+        // 启动/重启定时器
+        function startPolling(intervalMs) {
+            // 如果之前有定时器，先清除
+            if (timerId) {
+                clearInterval(timerId);
+            }
+            // 设置新的定时器
+            timerId = setInterval(fetchData, intervalMs);
+            console.log(`刷新间隔已更新为: ${intervalMs}ms`);
         }
 
         // 渲染仪表盘
@@ -381,7 +465,6 @@
             els.totalWriteVal.textContent = writeVal.toFixed(1);
 
             // 更新 Total 进度条 (简单的视觉比例，假设满量程为 100MB/s = 100000 KB/s)
-            // 这里的满量程是视觉上的，如果超过100%会自动限制在100%宽度
             const maxScale = 100000; 
             els.totalReadBar.style.width = Math.min((readVal / maxScale) * 100, 100) + '%';
             els.totalWriteBar.style.width = Math.min((writeVal / maxScale) * 100, 100) + '%';
@@ -424,8 +507,23 @@
 
         // 初始化
         function init() {
-            fetchData(); // 立即执行一次
-            setInterval(fetchData, REFRESH_INTERVAL); // 开启定时器
+            // 初始先运行一次时间更新
+            els.statusTime.textContent = getFormattedTime();
+
+            // 监听下拉框变化事件
+            els.refreshSelect.addEventListener('change', (e) => {
+                const newInterval = parseInt(e.target.value);
+                // 立即重新开始轮询
+                startPolling(newInterval);
+                // 为了更好的体验，改变间隔时立即请求一次数据
+                fetchData();
+            });
+
+            // 立即执行一次请求
+            fetchData();
+            
+            // 开启默认定时器 (2s)
+            startPolling(2000);
         }
 
         // 启动
