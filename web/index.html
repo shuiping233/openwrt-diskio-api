@@ -232,7 +232,6 @@
         }
 
         .disk-name {
-            font-family: monospace;
             font-weight: 700;
             font-size: 1.1rem;
             color: var(--text-primary);
@@ -453,7 +452,6 @@
 
         // 渲染仪表盘
         function renderDashboard(data) {
-            // 1. 处理 Total 数据
             const total = data['total'] || { read: "0.0", write: "0.0", unit: "KB/s" };
             const readVal = parseFloat(total.read);
             const writeVal = parseFloat(total.write);
@@ -477,10 +475,32 @@
             // 清空旧内容
             els.disksGrid.innerHTML = '';
 
+            // 1. 处理 Total 数据
             diskNames.forEach(name => {
                 const disk = data[name];
                 const r = parseFloat(disk.read).toFixed(1);
                 const w = parseFloat(disk.write).toFixed(1);
+                
+                // 获取占用数据 (可能为空)
+                const totalGb = disk.total_gb || "0.00";
+                const usedGb = disk.used_gb || "0.00";
+                const percent = parseFloat(disk.used_percent || "0");
+                
+                // 构建占用 HTML (如果有数据才显示)
+                let usageHtml = '';
+                if (disk.used_percent) {
+                    usageHtml = `
+                        <div style="margin-top:8px;">
+                            <div style="display:flex; justify-content:space-between; font-size:0.75rem; color:var(--text-secondary); margin-bottom:4px;">
+                                <span>Usage: ${usedGb} / ${totalGb} GB</span>
+                                <span>${percent}%</span>
+                            </div>
+                            <div style="height:4px; background:#334155; border-radius:2px; overflow:hidden;">
+                                <div style="height:100%; width:${Math.min(percent, 100)}%; background-color: ${percent > 90 ? '#ef4444' : '#3b82f6'}; transition: width 0.5s;"></div>
+                            </div>
+                        </div>
+                    `;
+                }
                 
                 // 创建卡片 DOM
                 const card = document.createElement('div');
@@ -498,6 +518,7 @@
                         <span class="io-label">Write</span>
                         <span class="io-val text-write">${w}</span>
                     </div>
+                    ${usageHtml}
                 `;
                 els.disksGrid.appendChild(card);
             });
