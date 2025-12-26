@@ -26,10 +26,10 @@ builds:
     ldflags:
       - -s -w
 
-# upx:
-#   - enabled: true
-#     compress: best
-#     brute: true          # 再极致一点（可选）
+upx:
+  - enabled: true
+    compress: best
+    brute: true          # 再极致一点（可选）
 
 # 关掉不需要的流水线步骤
 archives:
