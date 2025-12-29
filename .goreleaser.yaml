@@ -1,24 +1,20 @@
-# .goreleaser.yaml
 version: 2
 
 project_name: diskio
 
 before:
   hooks:
-    # 可选：确保 go mod 已整理
     - go mod tidy
 
 builds:
   - id: diskio
-    main: ./main.go
+    main: ./src/main.go
     binary: diskio
-    # 只编我们需要的平台
     goos:
       - linux
     goarch:
       - arm64
       - amd64
-    # 使用 musl 工具链静态链接，适配 OpenWrt
     env:
       - CGO_ENABLED=0
     flags:
@@ -29,14 +25,13 @@ builds:
 upx:
   - enabled: true
     compress: best
-    brute: true          # 再极致一点（可选）
+    brute: true
 
-# 关掉不需要的流水线步骤
 archives:
-  - format: binary   # 不打包，只留裸二进制
+  - format: binary
 checksum:
   disable: true
 changelog:
   disable: true
-release:
-  disable: true
+# release:
+#   disable: true
