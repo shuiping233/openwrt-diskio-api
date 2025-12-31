@@ -1,0 +1,32 @@
+{
+    "network": {
+        "global": {
+            "ipv4": [
+                "192.168.1.1"
+            ], // 填wan口公网地址
+            "ipv6": [
+                "fe80::1"
+            ], // 填wan口公网地址
+            "dns": [
+                "192.168.1.1"
+            ],
+            "gateway": "192.168.1.1"
+        },
+        "eth0": {
+            "ipv4": [
+                "192.168.1.1"
+            ],
+            "ipv6": [
+                "fe80::1"
+            ] // 无论什么地址都放进去
+        }
+    },
+    "system": {
+        "hostname": "raspberrypi",
+        "kernel": "5.10.17-v7l+",
+        "os": "Raspbian GNU/Linux 10 (buster)",
+        "device_name": "Raspberry Pi 4 Model B Rev 1.4",
+        "arch": "aarch64",
+        "timezone": "Asia/Shanghai"
+    }
+}

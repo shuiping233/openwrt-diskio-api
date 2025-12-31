@@ -1,0 +1,683 @@
+//go:build linux
+// +build linux
+
+package metric
+
+import (
+	"encoding/binary"
+	"fmt"
+	"os"
+	"os/exec"
+	"strconv"
+	"strings"
+	"time"
+
+	"openwrt-diskio-api/src/model"
+	"openwrt-diskio-api/src/utils"
+)
+
+type rawConn struct {
+	protocol string
+	state    string // 只有tcp有
+	kv       map[string]string
+}
+
+func runCommand(name string, arg ...string) (string, error) {
+	cmd := exec.Command(name, arg...)
+
+	result, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(result)), nil
+}
+
+func readProcFile(filePath string) (string, error) {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(data)), nil
+}
+
+// TODO 暂时只实现了读取cpu总温度,arm设备一般cpu簇共用一个温度传感器,后面再说
+func readCpuTemperature() (float64, string) {
+	raw, err := readProcFile("/sys/class/thermal/thermal_zone0/temp")
+	if err != nil {
+		return -1, model.Celsius
+	}
+	microCelsius, _ := strconv.Atoi(strings.TrimSpace(raw)) // 毫摄氏度
+	return float64(microCelsius) / 1000, model.Celsius
+}
+
+func readCpuIdle() (allCoreCycles uint64, allCoreIdle uint64, coresIdle []model.CpuSnapUnit, err error) {
+	raw, err := readProcFile("/proc/stat")
+	if err != nil {
+		return 0, 0, nil, err
+	}
+	lines := strings.Split(raw, "\n")
+
+	for _, line := range lines {
+		if !strings.HasPrefix(line, "cpu") {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 5 {
+			continue
+		}
+
+		// 所有核心的汇总时间片,第5列是 idle 时间 :
+		// cpu  131326 24084 154131 514013688 7967 0 10506 0 0 0
+
+		// 各个核心各自的时间片,第5列是 idle 时间 :
+		// cpu0 6068 1272 7995 25699473 227 0 6274 0 0 0
+		// cpu1 6569 972 6603 25700482 1112 0 1322 0 0 0
+
+		idle, _ := strconv.ParseUint(fields[4], 10, 64)
+		coreCycles, err := utils.SumUint64(fields[1:])
+		if err != nil {
+			return 0, 0, nil, err
+		}
+		if fields[0] == "cpu" {
+			allCoreCycles = coreCycles
+			allCoreIdle = idle
+		} else {
+			coresIdle = append(
+				coresIdle,
+				model.CpuSnapUnit{
+					Idle:   idle,
+					Cycles: coreCycles,
+				},
+			)
+		}
+	}
+	return allCoreCycles, allCoreIdle, coresIdle, nil
+}
+
+func readTotalCpuUsage(lastSnap *model.CpuSnap) (allCoresUsage float64, coresUsage []float64) {
+	nowAllCoreCycles, nowAllCoreIdle, nowCoresStatus, _ := readCpuIdle()
+
+	// 总占用
+	allCoresUsage = utils.CalculateCpuUsage(
+		nowAllCoreCycles,
+		lastSnap.AllCycles,
+		nowAllCoreIdle,
+		lastSnap.AllCoreIdle,
+	)
+
+	// 每核心占用
+	for index, nowCore := range nowCoresStatus {
+		if index >= len(lastSnap.Cores) {
+			coresUsage = append(coresUsage, -1)
+			continue
+		}
+		coreUsage := utils.CalculateCpuUsage(
+			nowCore.Cycles,
+			lastSnap.Cores[index].Cycles,
+			nowCore.Idle,
+			lastSnap.Cores[index].Idle,
+		)
+		coresUsage = append(coresUsage, coreUsage)
+	}
+
+	lastSnap.AllCycles = nowAllCoreCycles
+	lastSnap.AllCoreIdle = nowAllCoreIdle
+	lastSnap.Cores = nowCoresStatus
+	return allCoresUsage, coresUsage
+}
+
+// example output : 2d 14h 7m 36s
+func readSystemUptime() string {
+	raw, _ := readProcFile("/proc/uptime")
+	floatTime, _ := strconv.ParseFloat(strings.Fields(raw)[0], 64)
+	second := int(floatTime)
+	day := int(second) / 86400
+	second %= 86400
+	hour := int(second) / 3600
+	second %= 3600
+	minute := int(second) / 60
+	s := int(second) % 60
+
+	// 省略为 0 的段
+	builder := strings.Builder{}
+	if day > 0 {
+		builder.WriteString(strconv.Itoa(day) + "d ")
+	}
+	if hour > 0 {
+		builder.WriteString(strconv.Itoa(hour) + "h ")
+	}
+	if minute > 0 {
+		builder.WriteString(strconv.Itoa(minute) + "m ")
+	}
+	builder.WriteString(strconv.Itoa(s) + "s")
+	return builder.String()
+}
+
+func readKernelVersion() string {
+	version, err := runCommand("uname", "-r")
+	if err != nil {
+		return model.StringDefault
+	}
+	return version
+}
+func readSystemArch() string {
+	version, err := runCommand("uname", "-m")
+	if err != nil {
+		return model.StringDefault
+	}
+	return version
+}
+
+// such as : "Asia/Shanghai" , default is "UTC"
+func readLocalTimeZone() string {
+	loc := time.Now().Location()
+	if loc == nil {
+		return "UTC"
+	}
+	return loc.String()
+
+}
+
+func parseNetworkConnectionLine(line string) (*rawConn, *rawConn) {
+	fields := strings.Fields(line)
+	if len(fields) < 6 {
+		return nil, nil
+	}
+	origin := rawConn{
+		protocol: fields[model.NetConnectionIndexProto],
+		kv:       make(map[string]string, len(fields)),
+	}
+	reply := rawConn{
+		protocol: fields[model.NetConnectionIndexProto],
+		kv:       make(map[string]string, len(fields)),
+	}
+
+	// example :
+	// ipv4     2 udp      17 54 src=192.168.0.249 dst=20.189.79.72 sport=123 dport=123 packets=1 bytes=76 src=20.189.79.72 dst=163.142.193.23 sport=123 dport=123 packets=1 bytes=76 mark=0 zone=0 use=2
+	// 0 "ipv4" | 1 "2" | 2 "udp" | 3 "17" | 4 "54" | 5 "src=192.168.0.249" | 6 "dst=20.189.79.72" | 7 "sport=123" | 8 "dport=123" | 9 "packets=1" | 10 "bytes=76" | 11 "src=20.189.79.72" | 12 "dst=163.142.193.23" | 13 "sport=123" | 14 "dport=123" | 15 "packets=1" | 16 "bytes=76" | 17 "mark=0" | 18 "zone=0" | 19 "use=2" |
+	// ipv4     2 tcp      6 95 TIME_WAIT src=192.168.0.236 dst=192.168.0.1 sport=55674 dport=5000 packets=6 bytes=426 src=192.168.0.1 dst=192.168.0.236 sport=5000 dport=55674 packets=5 bytes=3007 [ASSURED] mark=0 zone=0 use=2
+	// 0 "ipv4" | 1 "2" | 2 "tcp" | 3 "6" | 4 "5" | 5 "TIME_WAIT" | 6 "src=192.168.0.236" | 7 "dst=192.168.0.1" | 8 "sport=42322" | 9 "dport=5000" | 10 "packets=7" | 11 "bytes=478" | 12 "src=192.168.0.1" | 13 "dst=192.168.0.236" | 14 "sport=5000" | 15 "dport=42322" | 16 "packets=5" | 17 "bytes=3007" | 18 "[ASSURED]" | 19 "mark=0" | 20 "zone=0" | 21 "use=2" |
+	// 固定头里找 state（TCP 才有）, 固定头在tcp下就前6个元素,udp的话就前5个元素
+	if fields[model.NetConnectionIndexState] != "" && !strings.Contains(fields[model.NetConnectionIndexState], "=") {
+		origin.state = fields[model.NetConnectionIndexState]
+	}
+	// 剩下全部 key=value
+	for _, item := range fields {
+		if kv := strings.SplitN(item, "=", 2); len(kv) == 2 {
+			key := kv[0]
+			value := kv[1]
+			_, exist := origin.kv[key]
+			if exist {
+				reply.kv[key] = value
+			}
+			origin.kv[key] = value
+		}
+	}
+	return &origin, &reply
+}
+
+// "result" must be not nil
+func readNetworkInterfaceIpAddress(result model.StaticNetworkMetric) {
+
+	if result == nil {
+		return
+	}
+
+	// IPv4 从 ip addr 简析（无 ip 命令就读 /proc/net/dev 无地址，可接受）
+	raw, err := runCommand("ip", "-o", "addr", "show")
+	if err != nil {
+		return
+	}
+
+	// example :
+	// 16: br-lan    inet 192.168.0.1/24 brd 192.168.0.255 scope global br-lan\       valid_lft forever preferred_lft forever
+	// 0   1         2    3              4   5             6     7      8             9         10      11            12
+
+	// 16: br-lan    inet6 xxxx:xxxx:xxxx:xxxx::1/64 scope global dynamic noprefixroute \       valid_lft 3028sec preferred_lft 3028sec
+	// 0   1         2     3                         4     5      6       7             8       9         10      11            12
+
+	// 16: br-lan    inet6 fe80::8409:9bff:fe6b:79ca/64 scope link \       valid_lft forever preferred_lft forever
+	// 0   1         2     3                            4     5    6       7         8       9             10
+
+	for _, l := range strings.Split(raw, "\n") {
+		fields := strings.Fields(l)
+		if len(fields) < 4 {
+			continue
+		}
+		var ipv4, ipv6 string
+		networkDeviceName := fields[1]
+		switch fields[2] {
+		case "inet":
+			ipv4 = utils.TrimSubnetMask(fields[3])
+		case "inet6":
+			ipv6 = utils.TrimSubnetMask(fields[3])
+		default:
+			continue
+		}
+		interfaceInfo, exists := result[networkDeviceName]
+		if !exists {
+			interfaceInfo = model.StaticNetworkInterfaceMetric{}
+			result[networkDeviceName] = interfaceInfo
+		}
+		interfaceInfo.Ipv4 = append(interfaceInfo.Ipv4, ipv4)
+		interfaceInfo.Ipv6 = append(interfaceInfo.Ipv6, ipv6)
+		result[networkDeviceName] = interfaceInfo
+	}
+}
+
+func readDns() []string {
+	dns := []string{}
+	raw, err := readProcFile("/tmp/resolv.conf.ppp")
+	if err != nil {
+		return dns
+	}
+	for _, line := range strings.Split(raw, "\n") {
+		if !strings.HasPrefix(line, "nameserver") {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		// example : "nameserver 8.8.8.8"
+		dns = append(dns, fields[1])
+	}
+	return dns
+}
+
+func readDefaultGateway() string {
+	raw, err := readProcFile("/proc/net/route")
+	if err != nil {
+		return model.StringDefault
+	}
+	for _, line := range strings.Split(raw, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 4 {
+			continue
+		}
+		// Destination == 00000000 且 Flags 含 0003
+		if fields[1] == "00000000" && strings.Contains(fields[3], "003") {
+			// Gateway 是小端十六进制
+			hexIP := fields[2]
+			if len(hexIP) != 8 {
+				continue
+			}
+			// 反转字节序
+			u, _ := strconv.ParseUint(hexIP, 16, 32)
+			ip := make([]byte, 4)
+			binary.LittleEndian.PutUint32(ip, uint32(u))
+			return fmt.Sprintf("%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3])
+		}
+	}
+	return model.StringDefault
+}
+
+func readDiskUsage(metric model.StorageMetric) {
+
+	// 读取 /proc/mounts 获取挂载信息
+	raw, err := readProcFile("/proc/mounts")
+	if err != nil {
+		return
+	}
+
+	for _, line := range strings.Split(raw, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 3 {
+			continue
+		}
+
+		devSource := fields[0] // 设备名，如 /dev/mmcblk2p2 或 overlay
+		mountPoint := fields[1]
+		fsType := fields[2]
+
+		// 过滤掉虚拟文件系统和不需要的
+		if strings.HasPrefix(devSource, "none") ||
+			fsType == "proc" ||
+			fsType == "sysfs" ||
+			fsType == "devtmpfs" ||
+			fsType == "tmpfs" ||
+			fsType == "cgroup" ||
+			fsType == "debugfs" {
+			continue
+		}
+
+		// OpenWrt 特例：overlayfs 通常基于 /dev/...，但在 /proc/mounts 里可能是 "overlay"
+		// 我们可以暂时忽略 overlay 的统计，或者通过 cat /proc/mounts 找到其下层的设备
+		// 这里为了通用性，如果 devSource 看起来是个设备路径（以 /dev 开头），我们就统计它
+		if !strings.HasPrefix(devSource, "/dev/") {
+			// 如果是 /dev/root 这种软链接情况，也可以处理，这里简化为只处理绝对路径
+			// 实际上 OpenWrt 的 rootfs_data 通常在 /dev/mmcblk2p2 之类
+			continue
+		}
+
+		stat, err := GetStatfs(mountPoint)
+		if err != nil {
+			continue
+		}
+
+		total := stat.Blocks * uint64(stat.Bsize)
+		free := stat.Bfree * uint64(stat.Bsize)
+		used := total - free
+
+		if total == 0 {
+			continue
+		}
+
+		convertTotal, totalUnit := utils.ConvertBytes(float64(total), model.BSecond)
+		convertUsed, usedUnit := utils.ConvertBytes(float64(used), model.BSecond)
+		percent := float64(used) / float64(total) * 100
+
+		metric[devSource] = model.StorageIoMetric{
+			Total: model.MetricUnit{
+				Value: convertTotal,
+				Unit:  totalUnit,
+			},
+			Used: model.MetricUnit{
+				Value: convertUsed,
+				Unit:  usedUnit,
+			},
+			UsedPercent: model.MetricUnit{
+				Value: percent,
+				Unit:  model.Percent,
+			},
+		}
+	}
+}
+
+func readDiskIoStats(metric model.StorageMetric, lastSnap model.DiskSnap, updateInterval uint) {
+	raw, err := readProcFile("/proc/diskstats")
+	if err != nil {
+		return
+	}
+	for _, line := range strings.Split(string(raw), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 14 {
+			continue
+		}
+		deviceName := fields[2]
+		if strings.HasPrefix(deviceName, "loop") ||
+			strings.HasPrefix(deviceName, "ram") ||
+			strings.HasPrefix(deviceName, "nbd") ||
+			strings.HasPrefix(deviceName, "zram") {
+			continue
+		}
+
+		readBytesNow, _ := strconv.ParseFloat(fields[5], 64)
+		writeBytesNow, _ := strconv.ParseFloat(fields[9], 64)
+
+		readRate := utils.CalculateRate(readBytesNow, lastSnap[deviceName].ReadBytes, updateInterval)
+		writeRate := utils.CalculateRate(writeBytesNow, lastSnap[deviceName].WriteBytes, updateInterval)
+
+		readRate, readDeltaUnit := utils.ConvertBytes(readRate, model.BSecond)
+		writeRate, WriteDeltaUnit := utils.ConvertBytes(writeRate, model.BSecond)
+
+		metric[deviceName] = model.StorageIoMetric{
+			Read: model.MetricUnit{
+				Value: readRate,
+				Unit:  readDeltaUnit,
+			},
+			Write: model.MetricUnit{
+				Value: writeRate,
+				Unit:  WriteDeltaUnit,
+			},
+		}
+
+		lastSnap[deviceName] = model.DiskSnapUnit{
+			ReadBytes:  readBytesNow,
+			WriteBytes: writeBytesNow,
+		}
+	}
+}
+
+func ReadNetworkMetric(lastSnap *model.NetSnap, updateInterval uint) model.NetworkMetric {
+	if lastSnap == nil {
+		panic("ReadNetworkMetric lastSnap is nil")
+	}
+
+	result := model.NetworkMetric{}
+	data, _ := readProcFile("/proc/net/dev")
+
+	totalRxNow := 0.0
+	totalTxNow := 0.0
+
+	for _, line := range strings.Split(string(data), "\n") {
+		if !strings.Contains(line, ":") {
+			continue
+		}
+		parts := strings.Fields(line)
+		interfaceName := strings.TrimSuffix(parts[0], ":")
+		if interfaceName == "lo" {
+			continue
+		}
+
+		rxNow, _ := strconv.ParseFloat(parts[1], 64)
+		txNow, _ := strconv.ParseFloat(parts[9], 64)
+
+		if _, exist := lastSnap.Interfaces[interfaceName]; !exist {
+			lastSnap.Interfaces[interfaceName] = model.NetSnapUnit{}
+		}
+		lastUnit := lastSnap.Interfaces[interfaceName]
+
+		rxRate := utils.CalculateRate(rxNow, lastUnit.RxBytes, updateInterval)
+		txRate := utils.CalculateRate(txNow, lastUnit.TxBytes, updateInterval)
+		totalRxNow += rxRate
+		totalTxNow += txRate
+
+		lastSnap.Interfaces[interfaceName] = model.NetSnapUnit{
+			RxBytes: rxNow,
+			TxBytes: txNow,
+		}
+
+		rxRate, rxUnit := utils.ConvertBytes(rxRate, model.BSecond)
+		txRate, txUnit := utils.ConvertBytes(txRate, model.BSecond)
+
+		result[interfaceName] = model.NetworkIoMetric{
+			Incoming: model.MetricUnit{Value: rxRate, Unit: rxUnit},
+			Outgoing: model.MetricUnit{Value: txRate, Unit: txUnit},
+		}
+	}
+
+	totalRxRate := utils.CalculateRate(totalRxNow, lastSnap.Total.RxBytes, updateInterval)
+	totalTxRate := utils.CalculateRate(totalTxNow, lastSnap.Total.TxBytes, updateInterval)
+
+	lastSnap.Total = model.NetSnapUnit{
+		RxBytes: totalRxNow,
+		TxBytes: totalTxNow,
+	}
+
+	totalRxRate, totalRxUnit := utils.ConvertBytes(totalRxRate, model.BSecond)
+	totalTxRate, totalTxUnit := utils.ConvertBytes(totalTxRate, model.BSecond)
+
+	result.SetTotal(
+		totalRxRate, totalRxUnit,
+		totalTxRate, totalTxUnit,
+	)
+
+	return result
+}
+
+func ReadCpuMetric(lastSnap *model.CpuSnap) model.CpuMetric {
+	if lastSnap == nil {
+		panic("ReadCpuMetric lastSnap is nil")
+	}
+	nowMetric := model.CpuMetric{}
+	totalUsage, coresUsage := readTotalCpuUsage(lastSnap)
+	temperature, temperatureUnit := readCpuTemperature()
+	nowMetric.SetTotal(
+		totalUsage, model.Percent, temperature, temperatureUnit,
+	)
+
+	for index, usage := range coresUsage {
+		nowMetric["cpu"+strconv.Itoa(index)] = model.CpuUsageMetric{
+			Usage: model.MetricUnit{
+				Value: usage,
+				Unit:  model.Percent,
+			},
+			Temperature: model.MetricUnit{
+				Value: temperature,
+				Unit:  temperatureUnit,
+			},
+		}
+	}
+	return nowMetric
+}
+
+func ReadMemoryMetric() model.MemoryMetric {
+	result := model.MemoryMetric{}
+	raw, _ := readProcFile("/proc/meminfo")
+	var total, avail, free uint64
+	for _, l := range strings.Split(raw, "\n") {
+		f := strings.Fields(l)
+		if len(f) < 2 {
+			continue
+		}
+		kB, _ := strconv.ParseUint(f[1], 10, 64)
+		switch f[0] {
+		case "MemTotal:":
+			total = kB
+		case "MemAvailable:":
+			avail = kB
+		case "MemFree:":
+			if avail == 0 { // 老内核没有 Available
+				free = kB
+			}
+		}
+	}
+	if avail == 0 {
+		avail = free
+	}
+
+	used := total - avail
+	usedPercent := float64(used) * 100 / float64(total)
+	result.UsedPercent = model.MetricUnit{
+		Value: usedPercent,
+		Unit:  model.Percent,
+	}
+
+	convertTotal, unit := utils.ConvertBytes(float64(total), model.KbSecond)
+	result.Total = model.MetricUnit{
+
+		Value: convertTotal,
+		Unit:  unit,
+	}
+
+	convertUsed, unit := utils.ConvertBytes(float64(used), model.KbSecond)
+	result.Used = model.MetricUnit{
+		Value: convertUsed,
+		Unit:  unit,
+	}
+
+	return result
+}
+
+func ReadSystemMetric() model.SystemMetric {
+	result := model.SystemMetric{
+		Uptime: readSystemUptime(),
+	}
+	return result
+}
+
+func ReadConnectionMetric(metric *model.NetworkConnectionMetric) {
+	var lines []string
+	for _, path := range []string{"/proc/net/nf_conntrack", "/proc/net/ip_conntrack"} {
+		b, err := readProcFile(path)
+		if err != nil {
+			continue
+		}
+		lines = strings.Split(string(b), "\n")
+		break
+	}
+
+	var result []model.NetworkConnection
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+		originConnection, replyConnection := parseNetworkConnectionLine(line)
+		if originConnection == nil {
+			continue
+		}
+
+		switch originConnection.protocol {
+		case "tcp":
+			metric.Counts.Tcp++
+		case "udp":
+			metric.Counts.Udp++
+		default:
+			metric.Counts.Other++
+		}
+
+		for _, connection := range []*rawConn{originConnection, replyConnection} {
+			result = append(
+				result,
+				model.NetworkConnection{
+					SourceIp:        connection.kv["src"],
+					SourcePort:      connection.kv["sport"],
+					DestinationIp:   connection.kv["dst"],
+					DestinationPort: connection.kv["dport"],
+					Protocol:        connection.protocol,
+					State:           connection.state,
+					Bytes:           connection.kv["bytes"],
+					Packets:         connection.kv["packets"],
+				},
+			)
+		}
+	}
+	metric.Details = append(metric.Details, result...)
+}
+
+func ReadStaticSystemMetric() model.StaticSystemMetric {
+	os, err := readProcFile("/proc/version")
+	if err != nil {
+		os = model.StringDefault
+	}
+	deviceName, err := readProcFile("/proc/device-tree/model")
+	if err != nil {
+		deviceName = model.StringDefault
+	}
+	hostname, err := readProcFile("/proc/sys/kernel/hostname")
+	if err != nil {
+		hostname = model.StringDefault
+	}
+	kernelVersion := readKernelVersion()
+	arch := readSystemArch()
+	timezone := readLocalTimeZone()
+
+	result := model.StaticSystemMetric{
+		Arch:       arch,
+		DeviceName: deviceName,
+		Hostname:   hostname,
+		Kernel:     kernelVersion,
+		Os:         os,
+		Timezone:   timezone,
+	}
+	return result
+}
+
+func ReadStaticNetworkMetric() model.StaticNetworkMetric {
+	result := model.StaticNetworkMetric{}
+
+	readNetworkInterfaceIpAddress(result)
+
+	wanIpv4 := []string{model.StringDefault}
+	wanIpv6 := []string{model.StringDefault}
+	wanIp, exist := result["pppoe-wan"]
+	if exist {
+		wanIpv4 = wanIp.Ipv4
+		wanIpv6 = wanIp.Ipv6
+	}
+
+	result.SetGlobal(
+		wanIpv4, wanIpv6,
+		readDns(), readDefaultGateway(),
+	)
+
+	return result
+}
+
+func ReadStorageMetric(lastSnap model.DiskSnap, updateInterval uint) model.StorageMetric {
+	metric := model.StorageMetric{}
+	readDiskIoStats(metric, lastSnap, updateInterval)
+	readDiskUsage(metric)
+	return metric
+}
