@@ -1,6 +1,8 @@
 package utils
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"openwrt-diskio-api/src/model"
 	"strconv"
 	"strings"
@@ -74,4 +76,10 @@ func CalculateCpuUsage(nowCpuCycles uint64, lastCpuCycles uint64, nowCpuIdle uin
 	idleDelta := nowCpuIdle - lastCpuIdle
 	cpuUsage = (1 - float64(idleDelta)/float64(totalDelta)) * 100
 	return cpuUsage
+}
+
+func RandHex(length int) string {
+	b := make([]byte, length)
+	rand.Read(b) // 密码学安全
+	return hex.EncodeToString(b)
 }

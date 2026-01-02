@@ -10,12 +10,17 @@ import (
 	"openwrt-diskio-api/src/model"
 )
 
-func UpdateStaticMetric(
+type BackgroundService struct {
+	StaticMetric  *model.StaticMetric
+	DynamicMetric *model.DynamicMetric
+	Reader        FsReader
+	Runner        CommandRunnerInterface
+}
+
+func (b *BackgroundService) UpdateStaticMetric(
 	updateInterval uint,
 	lock *sync.RWMutex,
-	staticMetric *model.StaticMetric,
 ) {
-
 	prevTime := time.Now()
 	for {
 		currTime := time.Now()
@@ -24,10 +29,10 @@ func UpdateStaticMetric(
 			continue
 		}
 
-		staticSystemMetric := ReadStaticSystemMetric()
-		staticNetworkMetric := ReadStaticNetworkMetric()
+		staticSystemMetric := ReadStaticSystemMetric(b.Reader, b.Runner)
+		staticNetworkMetric := ReadStaticNetworkMetric(b.Reader, b.Runner)
 
-		staticMetric = &model.StaticMetric{
+		b.StaticMetric = &model.StaticMetric{
 			Network: staticNetworkMetric,
 			System:  staticSystemMetric,
 		}
@@ -39,12 +44,10 @@ func UpdateStaticMetric(
 
 }
 
-func UpdateDynamicMetric(
+func (b *BackgroundService) UpdateDynamicMetric(
 	updateInterval uint,
 	lock *sync.RWMutex,
-	dynamicMetric *model.DynamicMetric,
 ) {
-
 	diskSnap := model.DiskSnap{}
 	cpuSnap := model.CpuSnap{}
 	netSnap := model.NetSnap{
@@ -59,17 +62,15 @@ func UpdateDynamicMetric(
 		if elapsed <= 0 {
 			continue
 		}
-
-		// TODO 需要传入 elapsed 算 rate
-		networkMetric := ReadNetworkMetric(&netSnap, updateInterval)
-		cpuMetric := ReadCpuMetric(&cpuSnap)
-		storageMetric := ReadStorageMetric(diskSnap, updateInterval)
-		memoryMetric := ReadMemoryMetric()
-		systemMetric := ReadSystemMetric()
+		networkMetric := ReadNetworkMetric(b.Reader, &netSnap, updateInterval)
+		cpuMetric := ReadCpuMetric(b.Reader, &cpuSnap)
+		storageMetric := ReadStorageMetric(b.Reader, diskSnap, updateInterval)
+		memoryMetric := ReadMemoryMetric(b.Reader)
+		systemMetric := ReadSystemMetric(b.Reader)
 		networkConnectionMetric := model.NetworkConnectionMetric{}
-		ReadConnectionMetric(&networkConnectionMetric)
+		ReadConnectionMetric(b.Reader, &networkConnectionMetric)
 
-		dynamicMetric = &model.DynamicMetric{
+		b.DynamicMetric = &model.DynamicMetric{
 			Cpu:               cpuMetric,
 			Memory:            memoryMetric,
 			Network:           networkMetric,

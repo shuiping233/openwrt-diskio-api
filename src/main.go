@@ -15,6 +15,8 @@ import (
 
 	"openwrt-diskio-api/src/metric"
 	"openwrt-diskio-api/src/model"
+
+	"github.com/spf13/afero"
 )
 
 var (
@@ -62,9 +64,22 @@ func main() {
 		staticMetricInterval  = *flag.Uint("static-metric-interval", 60, " metric update interval")
 	)
 	flag.Parse()
+	reader := metric.FsReader{
+		Fs:    afero.NewOsFs(),
+		Paths: model.ProcfsPaths{},
+	}
 
-	go metric.UpdateDynamicMetric(dynamicMetricInterval, dynamicMetricLock, dynamicMetric)
-	go metric.UpdateStaticMetric(staticMetricInterval, staticMetricLock, staticMetric)
+	runner := metric.CommandRunner{}
+
+	background := metric.BackgroundService{
+		StaticMetric:  staticMetric,
+		DynamicMetric: dynamicMetric,
+		Reader:        reader,
+		Runner:        runner,
+	}
+
+	go background.UpdateDynamicMetric(dynamicMetricInterval, dynamicMetricLock)
+	go background.UpdateStaticMetric(staticMetricInterval, staticMetricLock)
 
 	webFS, _ := fs.Sub(webEmb, "web")
 	http.Handle("/", http.FileServer(http.FS(webFS)))

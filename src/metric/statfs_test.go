@@ -7,9 +7,9 @@ import (
 	"testing"
 )
 
-func TestGetStatfs_Success(t *testing.T) {
+func TestGetStatfsSuccess(t *testing.T) {
 	// 测试根文件系统
-	result, err := GetStatfs("/")
+	result, err := getStatfs("/")
 
 	if err != nil {
 		t.Fatalf("GetStatfs('/') failed: %v", err)
@@ -28,20 +28,17 @@ func TestGetStatfs_Success(t *testing.T) {
 		result.Bsize, result.Blocks, result.Bfree)
 }
 
-func TestGetStatfs_InvalidPath(t *testing.T) {
-	// 测试无效路径
-	_, err := GetStatfs("/nonexistent/path/that/does/not/exist")
-
-	if err == nil {
-		t.Error("Expected error for invalid path, got nil")
+func TestGetStatfsInvalidPath(t *testing.T) {
+	testCases := map[string]string{
+		"None exist path": "/nonexistent/path/that/does/not/exist",
+		"Empty path":      "",
 	}
-}
-
-func TestGetStatfs_EmptyPath(t *testing.T) {
-	// 测试空路径
-	_, err := GetStatfs("")
-
-	if err == nil {
-		t.Error("Expected error for empty path, got nil")
+	for testName, path := range testCases {
+		t.Run(testName, func(t *testing.T) {
+			_, err := getStatfs(path)
+			if err == nil {
+				t.Errorf("Expected error for invalid path %q , got nil", path)
+			}
+		})
 	}
 }

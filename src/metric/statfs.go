@@ -5,7 +5,7 @@ package metric
 
 import "syscall"
 
-func GetStatfs(mountPoint string) (syscall.Statfs_t, error) {
+func getStatfs(mountPoint string) (syscall.Statfs_t, error) {
 	var stat syscall.Statfs_t
 	if err := syscall.Statfs(mountPoint, &stat); err != nil {
 		return stat, err

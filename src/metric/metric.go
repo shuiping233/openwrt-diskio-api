@@ -6,8 +6,6 @@ package metric
 import (
 	"encoding/binary"
 	"fmt"
-	"os"
-	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -22,27 +20,9 @@ type rawConn struct {
 	kv       map[string]string
 }
 
-func runCommand(name string, arg ...string) (string, error) {
-	cmd := exec.Command(name, arg...)
-
-	result, err := cmd.Output()
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(string(result)), nil
-}
-
-func readProcFile(filePath string) (string, error) {
-	data, err := os.ReadFile(filePath)
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(string(data)), nil
-}
-
 // TODO 暂时只实现了读取cpu总温度,arm设备一般cpu簇共用一个温度传感器,后面再说
-func readCpuTemperature() (float64, string) {
-	raw, err := readProcFile("/sys/class/thermal/thermal_zone0/temp")
+func readCpuTemperature(reader FsReader) (float64, string) {
+	raw, err := reader.ReadFile(reader.Paths.CpuTemp())
 	if err != nil {
 		return -1, model.Celsius
 	}
@@ -50,8 +30,8 @@ func readCpuTemperature() (float64, string) {
 	return float64(microCelsius) / 1000, model.Celsius
 }
 
-func readCpuIdle() (allCoreCycles uint64, allCoreIdle uint64, coresIdle []model.CpuSnapUnit, err error) {
-	raw, err := readProcFile("/proc/stat")
+func readCpuIdle(reader FsReader) (allCoreCycles uint64, allCoreIdle uint64, coresIdle []model.CpuSnapUnit, err error) {
+	raw, err := reader.ReadFile(reader.Paths.CpuUsage())
 	if err != nil {
 		return 0, 0, nil, err
 	}
@@ -94,8 +74,8 @@ func readCpuIdle() (allCoreCycles uint64, allCoreIdle uint64, coresIdle []model.
 	return allCoreCycles, allCoreIdle, coresIdle, nil
 }
 
-func readTotalCpuUsage(lastSnap *model.CpuSnap) (allCoresUsage float64, coresUsage []float64) {
-	nowAllCoreCycles, nowAllCoreIdle, nowCoresStatus, _ := readCpuIdle()
+func readTotalCpuUsage(reader FsReader, lastSnap *model.CpuSnap) (allCoresUsage float64, coresUsage []float64) {
+	nowAllCoreCycles, nowAllCoreIdle, nowCoresStatus, _ := readCpuIdle(reader)
 
 	// 总占用
 	allCoresUsage = utils.CalculateCpuUsage(
@@ -127,8 +107,8 @@ func readTotalCpuUsage(lastSnap *model.CpuSnap) (allCoresUsage float64, coresUsa
 }
 
 // example output : 2d 14h 7m 36s
-func readSystemUptime() string {
-	raw, _ := readProcFile("/proc/uptime")
+func readSystemUptime(reader FsReader) string {
+	raw, _ := reader.ReadFile(reader.Paths.SystemUptime())
 	floatTime, _ := strconv.ParseFloat(strings.Fields(raw)[0], 64)
 	second := int(floatTime)
 	day := int(second) / 86400
@@ -153,15 +133,15 @@ func readSystemUptime() string {
 	return builder.String()
 }
 
-func readKernelVersion() string {
-	version, err := runCommand("uname", "-r")
+func readKernelVersion(runner CommandRunnerInterface) string {
+	version, err := runner.Run("uname", "-r")
 	if err != nil {
 		return model.StringDefault
 	}
 	return version
 }
-func readSystemArch() string {
-	version, err := runCommand("uname", "-m")
+func readSystemArch(runner CommandRunnerInterface) string {
+	version, err := runner.Run("uname", "-m")
 	if err != nil {
 		return model.StringDefault
 	}
@@ -217,14 +197,14 @@ func parseNetworkConnectionLine(line string) (*rawConn, *rawConn) {
 }
 
 // "result" must be not nil
-func readNetworkInterfaceIpAddress(result model.StaticNetworkMetric) {
+func readNetworkInterfaceIpAddress(runner CommandRunnerInterface, result model.StaticNetworkMetric) {
 
 	if result == nil {
 		return
 	}
 
 	// IPv4 从 ip addr 简析（无 ip 命令就读 /proc/net/dev 无地址，可接受）
-	raw, err := runCommand("ip", "-o", "addr", "show")
+	raw, err := runner.Run("ip", "-o", "addr", "show")
 	if err != nil {
 		return
 	}
@@ -265,9 +245,9 @@ func readNetworkInterfaceIpAddress(result model.StaticNetworkMetric) {
 	}
 }
 
-func readDns() []string {
+func readDns(reader FsReader) []string {
 	dns := []string{}
-	raw, err := readProcFile("/tmp/resolv.conf.ppp")
+	raw, err := reader.ReadFile(reader.Paths.DefaultDns())
 	if err != nil {
 		return dns
 	}
@@ -285,8 +265,8 @@ func readDns() []string {
 	return dns
 }
 
-func readDefaultGateway() string {
-	raw, err := readProcFile("/proc/net/route")
+func readDefaultGateway(reader FsReader) string {
+	raw, err := reader.ReadFile(reader.Paths.DefaultGateway())
 	if err != nil {
 		return model.StringDefault
 	}
@@ -312,10 +292,8 @@ func readDefaultGateway() string {
 	return model.StringDefault
 }
 
-func readDiskUsage(metric model.StorageMetric) {
-
-	// 读取 /proc/mounts 获取挂载信息
-	raw, err := readProcFile("/proc/mounts")
+func readDiskUsage(reader FsReader, metric model.StorageMetric) {
+	raw, err := reader.ReadFile(reader.Paths.StorageDeviceMounts())
 	if err != nil {
 		return
 	}
@@ -350,7 +328,7 @@ func readDiskUsage(metric model.StorageMetric) {
 			continue
 		}
 
-		stat, err := GetStatfs(mountPoint)
+		stat, err := getStatfs(mountPoint)
 		if err != nil {
 			continue
 		}
@@ -384,8 +362,9 @@ func readDiskUsage(metric model.StorageMetric) {
 	}
 }
 
-func readDiskIoStats(metric model.StorageMetric, lastSnap model.DiskSnap, updateInterval uint) {
-	raw, err := readProcFile("/proc/diskstats")
+func readDiskIoStats(reader FsReader, metric model.StorageMetric, lastSnap model.DiskSnap, updateInterval uint) {
+
+	raw, err := reader.ReadFile(reader.Paths.StorageDeviceIo())
 	if err != nil {
 		return
 	}
@@ -429,13 +408,14 @@ func readDiskIoStats(metric model.StorageMetric, lastSnap model.DiskSnap, update
 	}
 }
 
-func ReadNetworkMetric(lastSnap *model.NetSnap, updateInterval uint) model.NetworkMetric {
+func ReadNetworkMetric(reader FsReader, lastSnap *model.NetSnap, updateInterval uint) model.NetworkMetric {
 	if lastSnap == nil {
 		panic("ReadNetworkMetric lastSnap is nil")
 	}
 
 	result := model.NetworkMetric{}
-	data, _ := readProcFile("/proc/net/dev")
+
+	data, _ := reader.ReadFile(reader.Paths.NetworkDeviceIo())
 
 	totalRxNow := 0.0
 	totalTxNow := 0.0
@@ -496,13 +476,14 @@ func ReadNetworkMetric(lastSnap *model.NetSnap, updateInterval uint) model.Netwo
 	return result
 }
 
-func ReadCpuMetric(lastSnap *model.CpuSnap) model.CpuMetric {
+func ReadCpuMetric(reader FsReader, lastSnap *model.CpuSnap) model.CpuMetric {
 	if lastSnap == nil {
 		panic("ReadCpuMetric lastSnap is nil")
 	}
 	nowMetric := model.CpuMetric{}
-	totalUsage, coresUsage := readTotalCpuUsage(lastSnap)
-	temperature, temperatureUnit := readCpuTemperature()
+
+	totalUsage, coresUsage := readTotalCpuUsage(reader, lastSnap)
+	temperature, temperatureUnit := readCpuTemperature(reader)
 	nowMetric.SetTotal(
 		totalUsage, model.Percent, temperature, temperatureUnit,
 	)
@@ -522,9 +503,10 @@ func ReadCpuMetric(lastSnap *model.CpuSnap) model.CpuMetric {
 	return nowMetric
 }
 
-func ReadMemoryMetric() model.MemoryMetric {
+func ReadMemoryMetric(reader FsReader) model.MemoryMetric {
 	result := model.MemoryMetric{}
-	raw, _ := readProcFile("/proc/meminfo")
+
+	raw, _ := reader.ReadFile(reader.Paths.SystemMemoryInfo())
 	var total, avail, free uint64
 	for _, l := range strings.Split(raw, "\n") {
 		f := strings.Fields(l)
@@ -570,17 +552,18 @@ func ReadMemoryMetric() model.MemoryMetric {
 	return result
 }
 
-func ReadSystemMetric() model.SystemMetric {
+func ReadSystemMetric(reader FsReader) model.SystemMetric {
 	result := model.SystemMetric{
-		Uptime: readSystemUptime(),
+		Uptime: readSystemUptime(reader),
 	}
 	return result
 }
 
-func ReadConnectionMetric(metric *model.NetworkConnectionMetric) {
+func ReadConnectionMetric(reader FsReader, metric *model.NetworkConnectionMetric) {
 	var lines []string
-	for _, path := range []string{"/proc/net/nf_conntrack", "/proc/net/ip_conntrack"} {
-		b, err := readProcFile(path)
+
+	for _, path := range reader.Paths.NetworkConnection() {
+		b, err := reader.ReadFile(path)
 		if err != nil {
 			continue
 		}
@@ -626,21 +609,24 @@ func ReadConnectionMetric(metric *model.NetworkConnectionMetric) {
 	metric.Details = append(metric.Details, result...)
 }
 
-func ReadStaticSystemMetric() model.StaticSystemMetric {
-	os, err := readProcFile("/proc/version")
+func ReadStaticSystemMetric(reader FsReader, runner CommandRunnerInterface) model.StaticSystemMetric {
+
+	os, err := reader.ReadFile(reader.Paths.SystemVersion())
 	if err != nil {
 		os = model.StringDefault
 	}
-	deviceName, err := readProcFile("/proc/device-tree/model")
+
+	deviceName, err := reader.ReadFile(reader.Paths.HardwareName())
 	if err != nil {
 		deviceName = model.StringDefault
 	}
-	hostname, err := readProcFile("/proc/sys/kernel/hostname")
+
+	hostname, err := reader.ReadFile(reader.Paths.SystemHostname())
 	if err != nil {
 		hostname = model.StringDefault
 	}
-	kernelVersion := readKernelVersion()
-	arch := readSystemArch()
+	kernelVersion := readKernelVersion(runner)
+	arch := readSystemArch(runner)
 	timezone := readLocalTimeZone()
 
 	result := model.StaticSystemMetric{
@@ -654,10 +640,10 @@ func ReadStaticSystemMetric() model.StaticSystemMetric {
 	return result
 }
 
-func ReadStaticNetworkMetric() model.StaticNetworkMetric {
+func ReadStaticNetworkMetric(reader FsReader, runner CommandRunnerInterface) model.StaticNetworkMetric {
 	result := model.StaticNetworkMetric{}
 
-	readNetworkInterfaceIpAddress(result)
+	readNetworkInterfaceIpAddress(runner, result)
 
 	wanIpv4 := []string{model.StringDefault}
 	wanIpv6 := []string{model.StringDefault}
@@ -669,15 +655,15 @@ func ReadStaticNetworkMetric() model.StaticNetworkMetric {
 
 	result.SetGlobal(
 		wanIpv4, wanIpv6,
-		readDns(), readDefaultGateway(),
+		readDns(reader), readDefaultGateway(reader),
 	)
 
 	return result
 }
 
-func ReadStorageMetric(lastSnap model.DiskSnap, updateInterval uint) model.StorageMetric {
+func ReadStorageMetric(reader FsReader, lastSnap model.DiskSnap, updateInterval uint) model.StorageMetric {
 	metric := model.StorageMetric{}
-	readDiskIoStats(metric, lastSnap, updateInterval)
-	readDiskUsage(metric)
+	readDiskIoStats(reader, metric, lastSnap, updateInterval)
+	readDiskUsage(reader, metric)
 	return metric
 }
