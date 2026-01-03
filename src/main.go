@@ -11,7 +11,6 @@ import (
 	"log"
 	"net/http"
 	"strconv"
-	"sync"
 
 	"openwrt-diskio-api/src/metric"
 	"openwrt-diskio-api/src/model"
@@ -20,17 +19,14 @@ import (
 )
 
 var (
-	dynamicMetric     = &model.DynamicMetric{}
-	staticMetric      = &model.StaticMetric{}
-	dynamicMetricLock = &sync.RWMutex{}
-	staticMetricLock  = &sync.RWMutex{}
-	reader            = metric.FsReader{Fs: afero.NewOsFs()}
-	runner            = metric.CommandRunner{}
-	background        = metric.BackgroundService{
-		StaticMetric:  staticMetric,
-		DynamicMetric: dynamicMetric,
-		Reader:        reader,
-		Runner:        runner,
+	reader     = metric.FsReader{Fs: afero.NewOsFs()}
+	runner     = metric.CommandRunner{}
+	background = metric.BackgroundService{
+		StaticMetric:            &model.StaticMetric{},
+		DynamicMetric:           &model.DynamicMetric{},
+		NetworkConnectionMetric: &model.NetworkConnectionMetric{},
+		Reader:                  reader,
+		Runner:                  runner,
 	}
 )
 
@@ -43,22 +39,23 @@ func DynamicMetricHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// dynamicMetricLock .RLock()
-	// out := dynamicMetric
-	// dynamicMetricLock .RUnlock()
-
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(background.DynamicMetric)
+}
+func NetworkConnectionMetricHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "only GET", http.StatusMethodNotAllowed)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(background.NetworkConnectionMetric)
 }
 func StaticMetricHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "only GET", http.StatusMethodNotAllowed)
 		return
 	}
-
-	// dynamicMetricLock .RLock()
-	// out := dynamicMetric
-	// dynamicMetricLock .RUnlock()
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(background.StaticMetric)
@@ -73,8 +70,9 @@ func main() {
 	)
 	flag.Parse()
 
-	go background.UpdateDynamicMetric(dynamicMetricInterval, dynamicMetricLock)
-	go background.UpdateStaticMetric(staticMetricInterval, staticMetricLock)
+	go background.UpdateDynamicMetric(dynamicMetricInterval)
+	go background.UpdateNetworkConnectionDetails(dynamicMetricInterval)
+	go background.UpdateStaticMetric(staticMetricInterval)
 
 	webFS, _ := fs.Sub(webEmb, "web")
 	http.Handle("/", http.FileServer(http.FS(webFS)))
@@ -82,10 +80,12 @@ func main() {
 	addr := *host + ":" + strconv.Itoa(*port)
 
 	http.HandleFunc("/metric/dynamic", DynamicMetricHandler)
+	http.HandleFunc("/metric/network_connection", NetworkConnectionMetricHandler)
 	http.HandleFunc("/metric/static", StaticMetricHandler)
 
 	log.Printf("listen http://%s/", addr)
 	log.Printf("Interface url : http://%s/metric/dynamic", addr)
+	log.Printf("Interface url : http://%s/metric/network_connection", addr)
 	log.Printf("Interface url : http://%s/metric/static", addr)
 	log.Fatal(http.ListenAndServe(addr, nil))
 }

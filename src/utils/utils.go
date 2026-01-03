@@ -11,7 +11,13 @@ import (
 // If "unit" is unknown unit , return unchanged.
 func ConvertBytes(bytes float64, unit string) (float64, string) {
 	unit = TrimBytesUnit(unit)
-	unitListIndex := findIndex(model.UnitList, unit)
+
+	unitList := model.RateUnitList
+	if findIndex(model.DataUnitList, unit) != -1 {
+		unitList = model.DataUnitList
+	}
+
+	unitListIndex := findIndex(unitList, unit)
 	if unitListIndex < 0 {
 		return bytes, unit
 	}
@@ -20,10 +26,10 @@ func ConvertBytes(bytes float64, unit string) (float64, string) {
 		return bytes, unit
 	}
 	newUnitListIndex := unitListIndex + 1
-	if newUnitListIndex >= len(model.UnitList) {
+	if newUnitListIndex >= len(unitList) {
 		return bytes, unit
 	}
-	return ConvertBytes(newBytes, model.UnitList[newUnitListIndex])
+	return ConvertBytes(newBytes, unitList[newUnitListIndex])
 }
 
 func TrimBytesUnit(unit string) string {
@@ -106,4 +112,27 @@ func RandHex(length int) string {
 	b := make([]byte, (length/2)+1)
 	rand.Read(b)
 	return hex.EncodeToString(b)[:length]
+}
+
+// if err , return -1
+func TryInt(input string) int {
+	result, err := strconv.Atoi(input)
+	if err != nil {
+		return -1
+	}
+	return result
+}
+func TryInt64(input string) int64 {
+	result, err := strconv.ParseInt(input, 10, 64)
+	if err != nil {
+		return -1
+	}
+	return result
+}
+func TryFloat64(input string) float64 {
+	result, err := strconv.ParseFloat(input, 64)
+	if err != nil {
+		return -1
+	}
+	return result
 }

@@ -170,7 +170,7 @@ func readLocalTimeZone(reader FsReaderInterface) string {
 			return result
 		}
 		result = strings.TrimSpace(fields[2])
-		result = strings.Trim(result,"'")
+		result = strings.Trim(result, "'")
 	}
 	return result
 }
@@ -256,8 +256,12 @@ func readNetworkInterfaceIpAddress(runner CommandRunnerInterface, result model.S
 			interfaceInfo = model.StaticNetworkInterfaceMetric{}
 			result[networkDeviceName] = interfaceInfo
 		}
-		interfaceInfo.Ipv4 = append(interfaceInfo.Ipv4, ipv4)
-		interfaceInfo.Ipv6 = append(interfaceInfo.Ipv6, ipv6)
+		if ipv4 != "" {
+			interfaceInfo.Ipv4 = append(interfaceInfo.Ipv4, ipv4)
+		}
+		if ipv6 != "" {
+			interfaceInfo.Ipv6 = append(interfaceInfo.Ipv6, ipv6)
+		}
 		result[networkDeviceName] = interfaceInfo
 	}
 }
@@ -434,8 +438,8 @@ func ReadNetworkMetric(reader FsReaderInterface, lastSnap *model.NetSnap, update
 
 	data, _ := reader.ReadFile(procPaths.NetworkDeviceIo())
 
-	totalRxNow := 0.0
-	totalTxNow := 0.0
+	totalRxRateNow := 0.0
+	totalTxRateNow := 0.0
 
 	for _, line := range strings.Split(string(data), "\n") {
 		if !strings.Contains(line, ":") {
@@ -443,7 +447,8 @@ func ReadNetworkMetric(reader FsReaderInterface, lastSnap *model.NetSnap, update
 		}
 		parts := strings.Fields(line)
 		interfaceName := strings.TrimSuffix(parts[0], ":")
-		if interfaceName == "lo" {
+		if interfaceName == "lo" ||
+			strings.HasPrefix(interfaceName, "loopback") {
 			continue
 		}
 
@@ -457,8 +462,8 @@ func ReadNetworkMetric(reader FsReaderInterface, lastSnap *model.NetSnap, update
 
 		rxRate := utils.CalculateRate(rxNow, lastUnit.RxBytes, updateInterval)
 		txRate := utils.CalculateRate(txNow, lastUnit.TxBytes, updateInterval)
-		totalRxNow += rxRate
-		totalTxNow += txRate
+		totalRxRateNow += rxRate
+		totalTxRateNow += txRate
 
 		lastSnap.Interfaces[interfaceName] = model.NetSnapUnit{
 			RxBytes: rxNow,
@@ -474,16 +479,8 @@ func ReadNetworkMetric(reader FsReaderInterface, lastSnap *model.NetSnap, update
 		}
 	}
 
-	totalRxRate := utils.CalculateRate(totalRxNow, lastSnap.Total.RxBytes, updateInterval)
-	totalTxRate := utils.CalculateRate(totalTxNow, lastSnap.Total.TxBytes, updateInterval)
-
-	lastSnap.Total = model.NetSnapUnit{
-		RxBytes: totalRxNow,
-		TxBytes: totalTxNow,
-	}
-
-	totalRxRate, totalRxUnit := utils.ConvertBytes(totalRxRate, model.BSecond)
-	totalTxRate, totalTxUnit := utils.ConvertBytes(totalTxRate, model.BSecond)
+	totalRxRate, totalRxUnit := utils.ConvertBytes(totalRxRateNow, model.BSecond)
+	totalTxRate, totalTxUnit := utils.ConvertBytes(totalTxRateNow, model.BSecond)
 
 	result.SetTotal(
 		totalRxRate, totalRxUnit,
@@ -553,14 +550,13 @@ func ReadMemoryMetric(reader FsReaderInterface) model.MemoryMetric {
 		Unit:  model.Percent,
 	}
 
-	convertTotal, unit := utils.ConvertBytes(float64(total), model.KbSecond)
+	convertTotal, unit := utils.ConvertBytes(float64(total), model.KiloByte)
 	result.Total = model.MetricUnit{
-
 		Value: convertTotal,
 		Unit:  unit,
 	}
 
-	convertUsed, unit := utils.ConvertBytes(float64(used), model.KbSecond)
+	convertUsed, unit := utils.ConvertBytes(float64(used), model.KiloByte)
 	result.Used = model.MetricUnit{
 		Value: convertUsed,
 		Unit:  unit,
@@ -608,17 +604,25 @@ func ReadConnectionMetric(reader FsReaderInterface, metric *model.NetworkConnect
 		}
 
 		for _, connection := range []*rawConn{originConnection, replyConnection} {
+
+			traffic, unit := utils.ConvertBytes(
+				utils.TryFloat64(connection.kv["bytes"]),
+				model.Byte,
+			)
 			result = append(
 				result,
 				model.NetworkConnection{
 					SourceIp:        connection.kv["src"],
-					SourcePort:      connection.kv["sport"],
+					SourcePort:      utils.TryInt(connection.kv["sport"]),
 					DestinationIp:   connection.kv["dst"],
-					DestinationPort: connection.kv["dport"],
+					DestinationPort: utils.TryInt(connection.kv["dport"]),
 					Protocol:        connection.protocol,
 					State:           connection.state,
-					Bytes:           connection.kv["bytes"],
-					Packets:         connection.kv["packets"],
+					Traffic: model.MetricUnit{
+						Value: traffic,
+						Unit:  unit,
+					},
+					Packets: utils.TryInt64(connection.kv["packets"]),
 				},
 			)
 		}

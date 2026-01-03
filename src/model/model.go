@@ -13,12 +13,19 @@ const (
 	GbSecond = "GB/S"
 	TbSecond = "TB/S"
 	PbSecond = "PB/S"
+	Byte     = "B"
+	KiloByte = "KB"
+	MegaByte = "MB"
+	GigaByte = "GB"
+	TeraByte = "TB"
+	PetaByte = "PB"
 	Percent  = "%"
 	Celsius  = "°C"
 )
 
 var (
-	UnitList = []string{BSecond, KbSecond, MbSecond, GbSecond, TbSecond, PbSecond}
+	RateUnitList = []string{BSecond, KbSecond, MbSecond, GbSecond, TbSecond, PbSecond}
+	DataUnitList = []string{Byte, KiloByte, MegaByte, GigaByte, TeraByte, PetaByte}
 )
 
 type DevIO struct {
@@ -36,7 +43,6 @@ type NetSnapUnit struct {
 	TxBytes float64
 }
 type NetSnap struct {
-	Total      NetSnapUnit
 	Interfaces map[string]NetSnapUnit
 }
 
@@ -54,12 +60,33 @@ type DiskSnap map[string]DiskSnapUnit
 type DiskSnapUnit struct{ ReadBytes, WriteBytes float64 }
 
 type DynamicMetric struct {
-	Storage           StorageMetric           `json:"storage"`
-	Cpu               CpuMetric               `json:"cpu"`
-	Network           NetworkMetric           `json:"network"`
-	Memory            MemoryMetric            `json:"memory"`
-	System            SystemMetric            `json:"system"`
-	NetworkConnection NetworkConnectionMetric `json:"network_connection"`
+	Storage StorageMetric `json:"storage"`
+	Cpu     CpuMetric     `json:"cpu"`
+	Network NetworkMetric `json:"network"`
+	Memory  MemoryMetric  `json:"memory"`
+	System  SystemMetric  `json:"system"`
+}
+
+type NetworkConnectionMetric struct {
+	Counts  NetworkConnectionCounts `json:"counts"`
+	Details []NetworkConnection     `json:"connections"`
+}
+
+type NetworkConnectionCounts struct {
+	Tcp   uint `json:"tcp"`
+	Udp   uint `json:"udp"`
+	Other uint `json:"other"`
+}
+
+type NetworkConnection struct {
+	SourceIp        string     `json:"source_ip"`
+	SourcePort      int        `json:"source_port"`
+	DestinationIp   string     `json:"destination_ip"`
+	DestinationPort int        `json:"destination_port"`
+	Protocol        string     `json:"protocol"`
+	State           string     `json:"state"`
+	Traffic         MetricUnit `json:"bytes"`
+	Packets         int64      `json:"packets"`
 }
 
 type StorageMetric map[string]StorageIoMetric
@@ -115,28 +142,6 @@ type MemoryMetric struct {
 
 type SystemMetric struct {
 	Uptime string `json:"uptime"`
-}
-
-type NetworkConnectionMetric struct {
-	Counts  NetworkConnectionCounts `json:"counts"`
-	Details []NetworkConnection     `json:"connections"`
-}
-
-type NetworkConnectionCounts struct {
-	Tcp   uint `json:"tcp"`
-	Udp   uint `json:"udp"`
-	Other uint `json:"other"`
-}
-
-type NetworkConnection struct {
-	SourceIp        string `json:"source_ip"`
-	SourcePort      string `json:"source_port"`
-	DestinationIp   string `json:"destination_ip"`
-	DestinationPort string `json:"destination_port"`
-	Protocol        string `json:"protocol"`
-	State           string `json:"state"`
-	Bytes           string `json:"bytes"`
-	Packets         string `json:"packets"`
 }
 
 type StaticMetric struct {
