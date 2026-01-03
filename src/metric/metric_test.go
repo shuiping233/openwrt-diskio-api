@@ -36,6 +36,24 @@ func NewMockReader(readData string, mockError error, path string) *TestReader {
 	return reader
 }
 
+type TestCommandRunner struct {
+	mock.Mock
+}
+
+func (c *TestCommandRunner) Run(name string, args ...string) (string, error) {
+	result := c.Called(name, args)
+	// 第 0 个返回值是 string，第 1 个是 error
+	return result.String(0), result.Error(1)
+}
+
+func NewMockRunner(mockData string, mockError error, commands []string) *TestCommandRunner {
+	reader := &TestCommandRunner{}
+	reader.
+		On("Run", commands[0], commands[1:]).
+		Return(mockData, mockError)
+	return reader
+}
+
 func TestReadCpuTemperature(t *testing.T) {
 
 	testCases := []struct {
@@ -189,14 +207,16 @@ softirq 709050685 1337984 167961916 259144 400626814 18849 0 2523414 104303354 1
 
 func TestReadLocalTimeZone(t *testing.T) {
 	testCases := []struct {
-		testName  string
-		readData  string
-		mockError error
-		expected  string
+		testName        string
+		readerReturn    string
+		readerMockError error
+		runnerReturn    string
+		runnerMockError error
+		expected        string
 	}{
 		{
-			testName: "load proc file success",
-			readData: `
+			testName: "load openwrt config get timezone",
+			readerReturn: `
 config system
         option ttylogin '0'
         option urandom_seed '0'
@@ -209,14 +229,39 @@ config system
         option cronloglevel '5'
         option log_size '16384'
 `,
-			mockError: nil,
-			expected:  "Asia/Shanghai",
+			readerMockError: nil,
+			runnerReturn:    "",
+			runnerMockError: errors.New("test error"),
+			expected:        "Asia/Shanghai",
+		},
+		{
+			testName:        "timedatectl get timezone",
+			readerReturn:    "",
+			readerMockError: nil,
+			runnerReturn:    "Asia/Shanghai",
+			runnerMockError: nil,
+			expected:        "Asia/Shanghai",
+		},
+		{
+			testName:        "get timezone failed",
+			readerReturn:    "",
+			readerMockError: errors.New("test error"),
+			runnerReturn:    "",
+			runnerMockError: errors.New("test error"),
+			expected:        model.StringDefault,
 		},
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.testName, func(t *testing.T) {
-			reader := NewMockReader(testCase.readData, testCase.mockError, testProcPaths.SystemConfig())
-			result := readLocalTimeZone(reader)
+			reader := NewMockReader(testCase.readerReturn,
+				testCase.readerMockError,
+				testProcPaths.SystemConfig(),
+			)
+			runner := NewMockRunner(testCase.runnerReturn,
+				testCase.runnerMockError,
+				[]string{"timedatectl", "show", "-p", "Timezone", "--value"},
+			)
+			result := readLocalTimeZone(reader, runner)
 			assert.Equal(t, testCase.expected, result)
 		})
 	}
