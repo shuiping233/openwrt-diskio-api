@@ -24,6 +24,14 @@ var (
 	staticMetric      = &model.StaticMetric{}
 	dynamicMetricLock = &sync.RWMutex{}
 	staticMetricLock  = &sync.RWMutex{}
+	reader            = metric.FsReader{Fs: afero.NewOsFs()}
+	runner            = metric.CommandRunner{}
+	background        = metric.BackgroundService{
+		StaticMetric:  staticMetric,
+		DynamicMetric: dynamicMetric,
+		Reader:        reader,
+		Runner:        runner,
+	}
 )
 
 //go:embed web
@@ -40,7 +48,7 @@ func DynamicMetricHandler(w http.ResponseWriter, r *http.Request) {
 	// dynamicMetricLock .RUnlock()
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(dynamicMetric)
+	json.NewEncoder(w).Encode(background.DynamicMetric)
 }
 func StaticMetricHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -53,7 +61,7 @@ func StaticMetricHandler(w http.ResponseWriter, r *http.Request) {
 	// dynamicMetricLock .RUnlock()
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(staticMetric)
+	json.NewEncoder(w).Encode(background.StaticMetric)
 }
 
 func main() {
@@ -64,19 +72,6 @@ func main() {
 		staticMetricInterval  = *flag.Uint("static-metric-interval", 60, " metric update interval")
 	)
 	flag.Parse()
-	reader := metric.FsReader{
-		Fs:    afero.NewOsFs(),
-		Paths: model.ProcfsPaths{},
-	}
-
-	runner := metric.CommandRunner{}
-
-	background := metric.BackgroundService{
-		StaticMetric:  staticMetric,
-		DynamicMetric: dynamicMetric,
-		Reader:        reader,
-		Runner:        runner,
-	}
 
 	go background.UpdateDynamicMetric(dynamicMetricInterval, dynamicMetricLock)
 	go background.UpdateStaticMetric(staticMetricInterval, staticMetricLock)

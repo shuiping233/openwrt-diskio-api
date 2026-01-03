@@ -13,7 +13,7 @@ import (
 type BackgroundService struct {
 	StaticMetric  *model.StaticMetric
 	DynamicMetric *model.DynamicMetric
-	Reader        FsReader
+	Reader        FsReaderInterface
 	Runner        CommandRunnerInterface
 }
 

@@ -15,6 +15,7 @@ type ProcfsPathsInterface interface {
 	SystemVersion() string
 	HardwareName() string
 	SystemHostname() string
+	SystemConfig() string
 }
 
 // ProcfsPaths 生产环境路径
@@ -35,3 +36,4 @@ func (p ProcfsPaths) NetworkConnection() []string {
 func (p ProcfsPaths) SystemVersion() string  { return "/proc/version" }
 func (p ProcfsPaths) HardwareName() string   { return "/proc/device-tree/model" }
 func (p ProcfsPaths) SystemHostname() string { return "/proc/sys/kernel/hostname" }
+func (p ProcfsPaths) SystemConfig() string   { return "/etc/config/system" }

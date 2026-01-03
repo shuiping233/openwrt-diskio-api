@@ -2,15 +2,24 @@ package metric
 
 import (
 	"io"
-	"openwrt-diskio-api/src/model"
 	"strings"
 
 	"github.com/spf13/afero"
 )
 
+type FsReaderInterface interface {
+	ReadFile(path string) (string, error)
+	Exists(path string) bool
+	Open(path string) (io.ReadCloser, error)
+}
+
+// type FsReader struct {
+// 	Fs    afero.Fs
+// 	Paths model.ProcfsPathsInterface
+// }
+
 type FsReader struct {
-	Fs    afero.Fs
-	Paths model.ProcfsPathsInterface
+	Fs afero.Fs
 }
 
 func (r FsReader) ReadFile(path string) (string, error) {
@@ -27,4 +36,3 @@ func (r FsReader) Exists(path string) bool {
 func (r FsReader) Open(path string) (io.ReadCloser, error) {
 	return r.Fs.Open(path)
 }
-
