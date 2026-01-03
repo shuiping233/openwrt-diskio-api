@@ -153,8 +153,16 @@ func readSystemArch(runner CommandRunnerInterface) string {
 }
 
 // such as : "Asia/Shanghai" , default is "UTC"
-func readLocalTimeZone(reader FsReaderInterface) string {
+func readLocalTimeZone(reader FsReaderInterface, runner CommandRunnerInterface) string {
 	result := model.StringDefault
+
+	// 1. systemd timedatectl (not openwrt)
+	timeZone, err := runner.Run("timedatectl", "show", "-p", "Timezone", "--value")
+	if err == nil {
+		return strings.TrimSpace(timeZone)
+	}
+
+	// 2. OpenWrt config "option zonename"
 	raw, err := reader.ReadFile(procPaths.SystemConfig())
 	if err != nil {
 		return result
@@ -420,8 +428,19 @@ func readDiskIoStats(reader FsReaderInterface, metric model.StorageMetric, lastS
 				Value: writeRate,
 				Unit:  WriteDeltaUnit,
 			},
+			Total: model.MetricUnit{
+				Value: -1,
+				Unit:  "",
+			},
+			Used: model.MetricUnit{
+				Value: -1,
+				Unit:  "",
+			},
+			UsedPercent: model.MetricUnit{
+				Value: -1,
+				Unit:  "",
+			},
 		}
-
 		lastSnap[deviceName] = model.DiskSnapUnit{
 			ReadBytes:  readBytesNow,
 			WriteBytes: writeBytesNow,
@@ -648,7 +667,7 @@ func ReadStaticSystemMetric(reader FsReaderInterface, runner CommandRunnerInterf
 	}
 	kernelVersion := readKernelVersion(runner)
 	arch := readSystemArch(runner)
-	timezone := readLocalTimeZone(reader)
+	timezone := readLocalTimeZone(reader, runner)
 
 	result := model.StaticSystemMetric{
 		Arch:       arch,

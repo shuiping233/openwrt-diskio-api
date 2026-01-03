@@ -28,16 +28,6 @@ var (
 	DataUnitList = []string{Byte, KiloByte, MegaByte, GigaByte, TeraByte, PetaByte}
 )
 
-type DevIO struct {
-	Read  string `json:"read"`
-	Write string `json:"write"`
-	Unit  string `json:"unit"`
-	// 新增：磁盘占用信息
-	TotalGB     string `json:"total_gb,omitempty"`     // 总容量 GB
-	UsedGB      string `json:"used_gb,omitempty"`      // 已用 GB
-	UsedPercent string `json:"used_percent,omitempty"` // 占用百分比
-}
-
 type NetSnapUnit struct {
 	RxBytes float64
 	TxBytes float64
@@ -85,18 +75,21 @@ type NetworkConnection struct {
 	DestinationPort int        `json:"destination_port"`
 	Protocol        string     `json:"protocol"`
 	State           string     `json:"state"`
-	Traffic         MetricUnit `json:"bytes"`
+	Traffic         MetricUnit `json:"traffic"`
 	Packets         int64      `json:"packets"`
 }
 
 type StorageMetric map[string]StorageIoMetric
 
 type StorageIoMetric struct {
-	Read        MetricUnit `json:"read"`
-	Write       MetricUnit `json:"write"`
-	Total       MetricUnit `json:"total"`
-	Used        MetricUnit `json:"used"`
-	UsedPercent MetricUnit `json:"used_percent"`
+	Read        MetricUnit  `json:"read"`
+	Write       MetricUnit  `json:"write"`
+	// if not read storage device usage , fill -1
+	Total       MetricUnit `json:"total,omitempty"`
+	// if not read storage device usage , fill -1
+	Used        MetricUnit `json:"used,omitempty"`
+	// if not read storage device usage , fill -1
+	UsedPercent MetricUnit `json:"used_percent,omitempty"`
 }
 
 func (s StorageMetric) SetTotal(read float64, readUnit string, write float64, writeUnit string) {
