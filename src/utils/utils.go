@@ -31,10 +31,16 @@ func TrimBytesUnit(unit string) string {
 }
 
 // if not found , return -1 , python list index be like
-func findIndex(list []string, s string) int {
-	for i, v := range list {
-		if v == s {
-			return i
+func findIndex(list []string, expected string) int {
+	if list == nil {
+		return -1
+	}
+	if expected == "" {
+		return -1
+	}
+	for index, value := range list {
+		if value == expected {
+			return index
 		}
 	}
 	return -1
@@ -60,6 +66,9 @@ func CalculateRate(now float64, last float64, interval uint) (rate float64) {
 
 // if err , return 0 , "slice" must be all number and > 0
 func SumUint64(slice []string) (uint64, error) {
+	if slice == nil {
+		return 0, nil
+	}
 	var sum uint64
 	for _, item := range slice {
 		number, err := strconv.ParseUint(item, 10, 64)
@@ -72,14 +81,29 @@ func SumUint64(slice []string) (uint64, error) {
 }
 
 func CalculateCpuUsage(nowCpuCycles uint64, lastCpuCycles uint64, nowCpuIdle uint64, lastCpuIdle uint64) (cpuUsage float64) {
-	totalDelta := nowCpuCycles - lastCpuCycles
-	idleDelta := nowCpuIdle - lastCpuIdle
-	cpuUsage = (1 - float64(idleDelta)/float64(totalDelta)) * 100
+	totalDelta := int(nowCpuCycles) - int(lastCpuCycles)
+
+	if totalDelta <= 0 {
+		return 0.0
+	}
+	idleDelta := int(nowCpuIdle) - int(lastCpuIdle)
+	if idleDelta <= 0 {
+		return 0.0
+	}
+	cpuUsage = (1.0 - float64(idleDelta)/float64(totalDelta)) * 100
+
+	if cpuUsage < 0 {
+		return 0.0
+	}
+
 	return cpuUsage
 }
 
 func RandHex(length int) string {
-	b := make([]byte, length)
-	rand.Read(b) // 密码学安全
-	return hex.EncodeToString(b)
+	if length <= 0 {
+		return ""
+	}
+	b := make([]byte, (length/2)+1)
+	rand.Read(b)
+	return hex.EncodeToString(b)[:length]
 }
