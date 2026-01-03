@@ -161,6 +161,7 @@ func readLocalTimeZone(reader FsReaderInterface) string {
 	}
 
 	for _, line := range strings.Split(raw, "\n") {
+		line = strings.TrimSpace(line)
 		if !strings.HasPrefix(line, "option zonename") {
 			continue
 		}
@@ -169,6 +170,7 @@ func readLocalTimeZone(reader FsReaderInterface) string {
 			return result
 		}
 		result = strings.TrimSpace(fields[2])
+		result = strings.Trim(result,"'")
 	}
 	return result
 }
