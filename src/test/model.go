@@ -1,16 +1,20 @@
 package test
 
-import "github.com/stretchr/testify/mock"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/mock"
+)
 
 const (
 	UnitTestPathPrefix = "/ut"
 )
 
 type Case struct {
-	TestName    string
-	Input       []string
-	Expected    interface{}
-	IsReturnErr bool
+	TestName       string
+	MockInput      interface{}
+	MockInputError error
+	AssertFunc     func(t *testing.T, results ...interface{})
 }
 type Cases []Case
 
@@ -48,4 +52,30 @@ type CommandRunner struct {
 func (c *CommandRunner) Run(name string, args ...string) (string, error) {
 	result := c.Called(name, args)
 	return result.String(0), result.Error(1)
+}
+
+
+type AbstractCase struct{
+	reader *ReaderCases
+	runner *RunnerCase
+	LastCpuSnapCase *LastCpuSnapCase
+}
+
+type ReaderCase struct {
+	MockInput      interface{}
+	MockInputError error
+	AssertFunc     func(t *testing.T, results ...interface{})
+}
+type ReaderCases []Case
+
+type LastCpuSnapCase struct {
+	MockInput      interface{}
+	MockInputError error
+	AssertFunc     func(t *testing.T, results ...interface{})
+}
+
+type RunnerCase struct {
+	MockInput      interface{}
+	MockInputError error
+	AssertFunc     func(t *testing.T, results ...interface{})
 }

@@ -1,25 +1,223 @@
 package metric
 
 import (
+	"errors"
+	"io"
+	"openwrt-diskio-api/src/model"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
-// func
+var testProcPaths = model.ProcfsPaths{}
 
-func TestReadProcFile(t *testing.T) {
+type TestReader struct {
+	mock.Mock
+}
 
-	// testCases := test.TestCases{
-	// 	{
-	// 		TestName:    "proc file",
-	// 		Input:       []string{"proc", "file"},
-	// 		Expected:    "",
-	// 		IsReturnErr: false,
-	// 	},
-	// 	{
-	// 		TestName:    "empty input",
-	// 		Input:       []string{""},
-	// 		Expected:    "",
-	// 		IsReturnErr: true,
-	// 	},
-	// }
+func (c *TestReader) ReadFile(path string) (string, error) {
+	result := c.Called(path)
+	// 第 0 个返回值是 string，第 1 个是 error
+	return result.String(0), result.Error(1)
+}
+func (c *TestReader) Exists(path string) bool {
+	return true
+}
+func (c *TestReader) Open(path string) (io.ReadCloser, error) {
+	return nil, nil
+}
+
+func NewMockReader(readData string, mockError error, path string) *TestReader {
+	reader := &TestReader{}
+	reader.
+		On("ReadFile", path).
+		Return(readData, mockError)
+	return reader
+}
+
+func TestReadCpuTemperature(t *testing.T) {
+
+	testCases := []struct {
+		testName  string
+		readData  string
+		mockError error
+		expected  float64
+	}{
+		{
+			testName:  "load proc file success",
+			readData:  "29444",
+			mockError: nil,
+			expected:  29.444,
+		},
+		{
+			testName:  "load proc file failed",
+			readData:  "",
+			mockError: errors.New("Test error"),
+			expected:  float64(-1),
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.testName, func(t *testing.T) {
+			reader := NewMockReader(testCase.readData, testCase.mockError, testProcPaths.CpuTemp())
+			temperature, unit := readCpuTemperature(reader)
+			assert.Equal(t, testCase.expected, temperature)
+			assert.Equal(t, model.Celsius, unit)
+
+		})
+	}
+}
+
+func TestReadCpuIdle(t *testing.T) {
+	testCases := []struct {
+		testName  string
+		readData  string
+		mockError error
+		expected1 uint64
+		expected2 uint64
+		expected3 []model.CpuSnapUnit
+		expected4 error
+	}{
+		{
+			testName: "load proc file success",
+			readData: `cpu  1043791 0 1339539 265632208 325 0 1644933 0 0 0
+cpu0 259672 0 330535 66794754 147 0 230147 0 0 0
+cpu1 263110 0 336276 66415272 64 0 368819 0 0 0
+cpu2 268302 0 346996 66375303 55 0 460430 0 0 0
+cpu3 252705 0 325730 66046877 58 0 585535 0 0 0
+intr 703399859 0 40388647 102208287 0 0 52118872 50625529 0 0 0 0 87500381 0 0 169338861 0 0 0 0 8615289 0 1 1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 70716787 0 0 0 15412 0 0 0 0 0 0 41101 0 0 0 0 0 18 0 0 0 1 0 0 0 0 0 0 0 6 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 121830665 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+ctxt 430686250
+btime 1766670786
+processes 677083
+procs_running 1
+procs_blocked 0
+softirq 709050685 1337984 167961916 259144 400626814 18849 0 2523414 104303354 175 32019035`,
+			mockError: nil,
+			expected1: 269660796,
+			expected2: 265632208,
+			expected3: []model.CpuSnapUnit{
+				{Cycles: 67615255, Idle: 66794754},
+				{Cycles: 67383541, Idle: 66415272},
+				{Cycles: 67451086, Idle: 66375303},
+				{Cycles: 67210905, Idle: 66046877},
+			},
+			expected4: nil,
+		},
+		{
+			testName:  "load proc file failed",
+			readData:  "",
+			mockError: errors.New("Test error"),
+			expected1: 0,
+			expected2: 0,
+			expected3: nil,
+			expected4: errors.New("Test error"),
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.testName, func(t *testing.T) {
+			reader := NewMockReader(testCase.readData, testCase.mockError, testProcPaths.CpuUsage())
+			allCoreCycles, allCoreIdle, coresIdle, err := readCpuIdle(reader)
+			assert.Equal(t, testCase.expected1, allCoreCycles)
+			assert.Equal(t, testCase.expected2, allCoreIdle)
+			assert.Equal(t, testCase.expected3, coresIdle)
+			assert.Equal(t, testCase.expected4, err)
+		})
+	}
+}
+
+func TestReadTotalCpuUsage(t *testing.T) {
+	testCases := []struct {
+		testName  string
+		readData  string
+		mockError error
+		lastSnap  *model.CpuSnap
+		expected1 uint64
+		expected2 uint64
+		expected3 []model.CpuSnapUnit
+		expected4 error
+	}{
+		{
+			testName: "Correct cpu idle",
+			readData: `cpu  1043791 0 1339539 265632208 325 0 1644933 0 0 0
+cpu0 259672 0 330535 66794754 147 0 230147 0 0 0
+cpu1 263110 0 336276 66415272 64 0 368819 0 0 0
+cpu2 268302 0 346996 66375303 55 0 460430 0 0 0
+cpu3 252705 0 325730 66046877 58 0 585535 0 0 0
+intr 703399859 0 40388647 102208287 0 0 52118872 50625529 0 0 0 0 87500381 0 0 169338861 0 0 0 0 8615289 0 1 1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 70716787 0 0 0 15412 0 0 0 0 0 0 41101 0 0 0 0 0 18 0 0 0 1 0 0 0 0 0 0 0 6 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 121830665 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+ctxt 430686250
+btime 1766670786
+processes 677083
+procs_running 1
+procs_blocked 0
+softirq 709050685 1337984 167961916 259144 400626814 18849 0 2523414 104303354 175 32019035`,
+			mockError: nil,
+			expected1: 269660796,
+			expected2: 265632208,
+			expected3: []model.CpuSnapUnit{
+				{Cycles: 67615255, Idle: 66794754},
+				{Cycles: 67383541, Idle: 66415272},
+				{Cycles: 67451086, Idle: 66375303},
+				{Cycles: 67210905, Idle: 66046877},
+			},
+			expected4: nil,
+		},
+		{
+			testName:  "load temperature failed",
+			readData:  "",
+			mockError: errors.New("Test error"),
+			expected1: 0,
+			expected2: 0,
+			expected3: nil,
+			expected4: errors.New("Test error"),
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.testName, func(t *testing.T) {
+			reader := NewMockReader(testCase.readData, testCase.mockError, testProcPaths.CpuUsage())
+			allCoreCycles, allCoreIdle, coresIdle, err := readCpuIdle(reader)
+			assert.Equal(t, testCase.expected1, allCoreCycles)
+			assert.Equal(t, testCase.expected2, allCoreIdle)
+			assert.Equal(t, testCase.expected3, coresIdle)
+			assert.Equal(t, testCase.expected4, err)
+		})
+	}
+
+}
+
+func TestReadLocalTimeZone(t *testing.T) {
+	testCases := []struct {
+		testName  string
+		readData  string
+		mockError error
+		expected  string
+	}{
+		{
+			testName: "load proc file success",
+			readData: `
+config system
+        option ttylogin '0'
+        option urandom_seed '0'
+        option hostname 'iStoreOS'
+        option compat_version '1.0'
+        option zonename 'Asia/Shanghai'
+        option timezone 'CST-8'
+        option log_proto 'udp'
+        option conloglevel '8'
+        option cronloglevel '5'
+        option log_size '16384'
+`,
+			mockError: nil,
+			expected:  "Asia/Shanghai",
+		},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.testName, func(t *testing.T) {
+			reader := NewMockReader(testCase.readData, testCase.mockError, testProcPaths.SystemConfig())
+			result := readLocalTimeZone(reader)
+			assert.Equal(t, testCase.expected, result)
+		})
+	}
 }
