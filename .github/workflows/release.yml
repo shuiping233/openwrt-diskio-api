@@ -3,10 +3,10 @@ name: Release for Multiple Platforms
 on:
   push:
     branches:
-      - main  
+      - main
       # - gh-action-test
-    tags: 
-      - '*'
+    tags:
+      - "*"
 
 permissions:
   contents: write
@@ -26,6 +26,8 @@ jobs:
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
+        with:
+          version: 10
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
