@@ -103,15 +103,14 @@ function renderSystemTab(dynamic, stat) {
         summaryHTML += createSummaryCard('内存使用率', `${memObj.value.toFixed(1)}`, '%', 'var(--accent-mem)');
     }
 
-    // Network Total
+    // Network Total (使用刚才修改好的代码)
     const netIn = dynamic.network?.total?.incoming;
     const netOut = dynamic.network?.total?.outgoing;
     if (netIn && netOut) {
-        summaryHTML += createSummaryCard('网络下行', formatBytes(netIn.value), netIn.unit, 'var(--accent-read)');
-        summaryHTML += createSummaryCard('网络上行', formatBytes(netOut.value), netOut.unit, 'var(--accent-write)');
+        summaryHTML += createSummaryCard('网络下行', formatBytes(netIn.value) + '/s', '', 'var(--accent-read)');
+        summaryHTML += createSummaryCard('网络上行', formatBytes(netOut.value) + '/s', '', 'var(--accent-write)');
     }
-
-    // System Info (Uptime, Hostname)
+    
     const uptime = dynamic.system?.uptime;
     const hostname = stat.system?.hostname;
     if (uptime) summaryHTML += createSummaryCard('系统运行时间', uptime, '', '#fff');
@@ -120,6 +119,10 @@ function renderSystemTab(dynamic, stat) {
     els.sysSummary.innerHTML = summaryHTML;
 
     // 2. 渲染详细折叠区域
+
+    // 【新增】在重新生成 HTML 前，保存当前用户打开的状态
+    const openTitles = getAccordionOpenTitles();
+
     let detailsHTML = '';
 
     // Storage Section
@@ -133,8 +136,8 @@ function renderSystemTab(dynamic, stat) {
                 <div class="metric-row" style="display:block">
                     <div style="font-weight:bold; margin-bottom:5px">${devName}</div>
                     <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px">
-                        <div><span class="metric-label">读:</span> ${formatBytes(devData.read.value)} ${devData.read.unit}</div>
-                        <div><span class="metric-label">写:</span> ${formatBytes(devData.write.value)} ${devData.write.unit}</div>
+                        <div><span class="metric-label">读:</span> ${formatBytes(devData.read.value)}/s</div>
+                        <div><span class="metric-label">写:</span> ${formatBytes(devData.write.value)}/s</div>
                         <div><span class="metric-label">容量:</span> ${devData.total.value} ${devData.total.unit}</div>
                         <div><span class="metric-label">使用率:</span> ${devData.used_percent.value.toFixed(1)}%</div>
                     </div>
@@ -159,7 +162,7 @@ function renderSystemTab(dynamic, stat) {
                 </div>
             `;
         }
-        detailsHTML += createAccordionSection('CPU 核心详情', cpuCards, false);
+        detailsHTML += createAccordionSection('CPU 核心详情', cpuCards, true);
     }
 
     // Network Details (合并 Static IP)
@@ -171,8 +174,8 @@ function renderSystemTab(dynamic, stat) {
             netCards += `
                 <div class="metric-row">
                     <span class="metric-label" style="width:60px">${iface} IO</span>
-                    <span class="metric-val" style="color:var(--accent-read)">↓${formatBytes(data.incoming.value)}</span>
-                    <span class="metric-val" style="color:var(--accent-write)">↑${formatBytes(data.outgoing.value)}</span>
+                    <span class="metric-val" style="color:var(--accent-read)">↓${formatBytes(data.incoming.value)}/s</span>
+                    <span class="metric-val" style="color:var(--accent-write)">↑${formatBytes(data.outgoing.value)}/s</span>
                 </div>
             `;
         }
@@ -197,7 +200,7 @@ function renderSystemTab(dynamic, stat) {
                 </div>
             `;
         }
-        detailsHTML += createAccordionSection('网络配置详情', netCards, false);
+        detailsHTML += createAccordionSection('网络配置详情', netCards, true);
     }
 
     // System Info Details
@@ -207,10 +210,37 @@ function renderSystemTab(dynamic, stat) {
         sysInfo += `<div class="metric-row"><span class="metric-label">Kernel</span><span class="metric-val">${stat.system.kernel}</span></div>`;
         sysInfo += `<div class="metric-row"><span class="metric-label">Arch</span><span class="metric-val">${stat.system.arch}</span></div>`;
         sysInfo += `<div class="metric-row"><span class="metric-label">Timezone</span><span class="metric-val">${stat.system.timezone}</span></div>`;
-        detailsHTML += createAccordionSection('系统信息详情', sysInfo, false);
+        detailsHTML += createAccordionSection('系统信息详情', sysInfo, true);
     }
 
     els.sysDetails.innerHTML = detailsHTML;
+
+    // 【新增】HTML 渲染完成后，恢复之前保存的状态
+    restoreAccordionState(openTitles);
+}
+
+
+// 获取当前打开的折叠面板标题集合
+function getAccordionOpenTitles() {
+    const titles = new Set();
+    document.querySelectorAll('.accordion-item.open .accordion-header h3').forEach(h3 => {
+        titles.add(h3.innerText.trim());
+    });
+    return titles;
+}
+
+// 恢复折叠面板状态
+function restoreAccordionState(openTitles) {
+    document.querySelectorAll('.accordion-item').forEach(item => {
+        const title = item.querySelector('.accordion-header h3').innerText.trim();
+        if (openTitles.has(title)) {
+            item.classList.add('open');
+            item.querySelector('.accordion-body').style.display = 'block';
+        } else {
+            item.classList.remove('open');
+            item.querySelector('.accordion-body').style.display = 'none';
+        }
+    });
 }
 
 // --- 渲染逻辑: 网络连接 ---
