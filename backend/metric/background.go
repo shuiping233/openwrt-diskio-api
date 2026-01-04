@@ -6,7 +6,7 @@ package metric
 import (
 	"time"
 
-	"openwrt-diskio-api/src/model"
+	"openwrt-diskio-api/backend/model"
 )
 
 type BackgroundService struct {

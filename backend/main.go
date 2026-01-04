@@ -12,8 +12,8 @@ import (
 	"net/http"
 	"strconv"
 
-	"openwrt-diskio-api/src/metric"
-	"openwrt-diskio-api/src/model"
+	"openwrt-diskio-api/backend/metric"
+	"openwrt-diskio-api/backend/model"
 
 	"github.com/spf13/afero"
 )

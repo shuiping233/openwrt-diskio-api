@@ -3,7 +3,7 @@ package utils
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"openwrt-diskio-api/src/model"
+	"openwrt-diskio-api/backend/model"
 	"strconv"
 	"strings"
 )

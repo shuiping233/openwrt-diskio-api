@@ -3,7 +3,7 @@ package metric
 import (
 	"errors"
 	"io"
-	"openwrt-diskio-api/src/model"
+	"openwrt-diskio-api/backend/model"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
