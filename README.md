@@ -5,6 +5,13 @@
 > [!WARNING]  
 > 本项目仍在开发中,仪表盘页面尚未足够完善,请谨慎在生产环境使用
 
+## 使用方法
+1. 从[releases](https://github.com/shuiping233/openwrt-diskio-api/releases)下载最新构建产物
+2. 将二进制文件和`./scripts/etc/inid.d/diskio-api`服务文件部署到openwrt设备上,推荐将二进制文件放置在`/usr/bin/`中,服务文件放置在`/etc/init.d/`中
+3. 使用文本编辑器打开服务文件,修改必要的"文件路径"或"监控端口等配置
+4. 给服务文件和二进制文件`chmod +x`权限,使用`/etc/init.d/diskio-api enable`使其服务开机自启,最后使用`/etc/init.d/diskio-api start`来启动服务
+
+
 ## 工具要求
 
 - go >= 1.18
