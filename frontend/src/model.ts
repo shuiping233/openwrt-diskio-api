@@ -70,6 +70,8 @@ export interface Connection {
   destination_port: number;
   protocol: string;
   state: string;
+  traffic: Metric;
+  packets: number;
 }
 
 export interface ConnectionApiResponse {

@@ -1,9 +1,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, onUnmounted, type Ref } from 'vue';
 import type {
-  Metric, StorageData, CpuData, NetworkDynamicData, SystemDynamicData, DynamicApiResponse,
-  IpConfig, NetworkStaticData, SystemStaticData, StaticApiResponse,
-  Connection, ConnectionApiResponse
+  DynamicApiResponse, StaticApiResponse, ConnectionApiResponse
 } from './model';
 
 
@@ -112,9 +110,10 @@ onUnmounted(() => {
           <line x1="8" y1="21" x2="16" y2="21"></line>
           <line x1="12" y1="17" x2="12" y2="21"></line>
         </svg> -->
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
-            </svg>
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round">
+          <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+        </svg>
         <span class="text-xl font-bold">系统 I/O 监控仪表盘</span>
       </div>
 
@@ -183,8 +182,24 @@ onUnmounted(() => {
         <div v-if="data.dynamic.memory?.used_percent"
           class="bg-slate-800 border border-slate-700 rounded-xl p-5 transition-all hover:-translate-y-0.5 hover:shadow-xl hover:border-slate-500">
           <div class="text-slate-400 text-sm mb-1">内存使用率</div>
-          <div class="text-xl font-bold mt-1">{{ data.dynamic.memory.used_percent.value.toFixed(1) }} <span
-              class="text-slate-400 text-sm">{{ data.dynamic.cpu.total.usage.unit }}</span></div>
+
+          <div class="flex justify-between items-baseline mt-1">
+            <!-- 左侧：百分比 -->
+            <div class="text-xl font-bold">
+              {{ data.dynamic.memory.used_percent.value.toFixed(1) }}
+              <span class="text-slate-300 text-sm ml-0.5">{{ data.dynamic.memory.used_percent.unit }}</span>
+            </div>
+
+            <!-- 右侧：具体使用量 -->
+            <div class="text-right">
+              <span class="font-bold">{{ data.dynamic.memory.used.value.toFixed(1) }}</span>
+              <span class="text-slate-300 text-sm ml-0.5">{{ data.dynamic.memory.used.unit }}</span>
+              <span class="text-slate-400 mx-1">/</span>
+              <span class="font-bold">{{ data.dynamic.memory.total.value.toFixed(1) }}</span>
+              <span class="text-slate-300 text-sm ml-0.5">{{ data.dynamic.memory.total.unit }}</span>
+            </div>
+          </div>
+
           <div class="h-1 bg-slate-700 mt-3 rounded-full overflow-hidden">
             <div class="h-full bg-blue-500 transition-all duration-500"
               :style="{ width: data.dynamic.memory.used_percent.value + '%' }"></div>
@@ -192,22 +207,24 @@ onUnmounted(() => {
         </div>
 
         <!-- Network In -->
-        <div v-if="data.dynamic.network?.total?.incoming"
-          class="bg-slate-800 border border-slate-700 rounded-xl p-5 flex items-center justify-between">
-          <div class="text-slate-400 text-sm mb-1">网络下行</div>
-          <div class="text-xl font-bold font-mono mt-1 text-cyan-500">{{
-            formatBytes(data.dynamic.network.total.incoming.value) }} <span class="text-slate-400 text-sm">{{
-              data.dynamic.network.total.incoming.unit }}</span>
+        <div v-if="data.dynamic.network?.total?.incoming" class="bg-slate-800 border border-slate-700 rounded-xl p-5">
+          <div class="flex items-center justify-between">
+            <div class="text-slate-400 text-sm">网络下行</div>
+            <div class="text-xl font-bold font-mono text-cyan-500">
+              {{ formatBytes(data.dynamic.network.total.incoming.value) }}
+              <span class="text-slate-400 text-sm">{{ data.dynamic.network.total.incoming.unit }}</span>
+            </div>
           </div>
         </div>
 
         <!-- Network Out -->
-        <div v-if="data.dynamic.network?.total?.outgoing"
-          class="bg-slate-800 border border-slate-700 rounded-xl p-5 flex items-center justify-between">
-          <div class="text-slate-400 text-sm mb-1">网络上行</div>
-          <div class="text-xl font-bold font-mono mt-1 text-orange-500">{{
-            formatBytes(data.dynamic.network.total.outgoing.value) }} <span class="text-slate-400 text-sm">{{
-              data.dynamic.network.total.incoming.unit }}</span>
+        <div v-if="data.dynamic.network?.total?.outgoing" class="bg-slate-800 border border-slate-700 rounded-xl p-5">
+          <div class="flex items-center justify-between">
+            <div class="text-slate-400 text-sm">网络上行</div>
+            <div class="text-xl font-bold font-mono text-orange-500">
+              {{ formatBytes(data.dynamic.network.total.outgoing.value) }}
+              <span class="text-slate-400 text-sm">{{ data.dynamic.network.total.outgoing.unit }}</span>
+            </div>
           </div>
         </div>
 
@@ -247,10 +264,10 @@ onUnmounted(() => {
                   {{ dev.read.unit }}</span></div>
               <div><span class="text-slate-500">写:</span> {{ dev.write.value }} <span class="font-mono text-slate-200">
                   {{ dev.write.unit }}</span></div>
-              <div><span class="text-slate-500">总容量:</span> <span class="font-mono">{{ dev.total.value }} {{
+              <div><span class="text-slate-500">总容量:</span> <span class="font-mono">{{ dev.total.value.toFixed(2) }} {{
                 dev.total.unit }}</span></div>
-              <div><span class="text-slate-500">已用:</span> <span class="font-mono">{{ dev.used.value }} {{ dev.used.unit
-                  }}</span></div>
+              <div><span class="text-slate-500">已用:</span> <span class="font-mono">{{ dev.used.value.toFixed(2) }} {{ dev.used.unit
+              }}</span></div>
             </div>
             <div class="h-1.5 bg-slate-900 rounded-full overflow-hidden mt-2">
               <div class="h-full bg-cyan-500 transition-all duration-500"
@@ -314,7 +331,7 @@ onUnmounted(() => {
               </h3>
               <div class="text-sm font-mono wrap-break-word space-y-1">
                 <div v-for="ip in info.ipv4" :key="ip" class="text-slate-200">{{ ip }}</div>
-                <div v-for="ip in info.ipv6" :key="ip" class="text-slate-500 text-xs">{{ ip }}</div>
+                <div v-for="ip in info.ipv6" :key="ip" class="text-slate-200 text-xs">{{ ip }}</div>
               </div>
             </div>
           </template>
@@ -391,13 +408,14 @@ onUnmounted(() => {
       </div>
       <div v-show="uiState.accordions.conn" class="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden">
         <div class="overflow-x-auto">
-          <table class="w-full text-sm text-left border-collapse">
+          <table class="w-full text-sm text-center border-collapse">
             <thead class="bg-slate-700/50 text-slate-300">
               <tr>
                 <th class="px-5 py-3 font-medium">协议</th>
                 <th class="px-5 py-3 font-medium">源地址</th>
                 <th class="px-5 py-3 font-medium">目标地址</th>
                 <th class="px-5 py-3 font-medium">状态</th>
+                <th class="px-5 py-3 font-medium">传输情况</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-700">
@@ -405,15 +423,17 @@ onUnmounted(() => {
                 class="hover:bg-slate-700/30 transition-colors">
                 <td class="px-5 py-3">
                   <span class="bg-slate-700 px-2 py-1 rounded text-xs text-slate-200">{{ c.protocol.toUpperCase()
-                    }}</span>
+                  }}</span>
                 </td>
-                <td class="px-5 py-3 font-mono text-slate-400">{{ c.source_ip }}{{ c.source_port > 0 ? ':' +
+                <td class="px-5 py-3 font-mono text-slate-300">{{ c.source_ip }}{{ c.source_port > 0 ? ':' +
                   c.source_port
                   :
                   '' }}</td>
-                <td class="px-5 py-3 font-mono text-slate-400">{{ c.destination_ip }}{{ c.destination_port > 0 ?
+                <td class="px-5 py-3 font-mono text-slate-300">{{ c.destination_ip }}{{ c.destination_port > 0 ?
                   ':' + c.destination_port : '' }}</td>
-                <td class="px-5 py-3 text-slate-300">{{ c.state || '-' }}</td>
+                <td class="px-5 py-3 text-slate-300 ">{{ c.state || '-' }}</td>
+                <td class="px-5 py-3 text-slate-300 ">{{ c.traffic.value }} {{ c.traffic.unit }} ({{ c.packets }} Pkgs.)
+                </td>
               </tr>
               <tr v-if="!data.connection.connections || data.connection.connections.length === 0">
                 <td colspan="4" class="px-5 py-8 text-center text-slate-500">暂无连接数据</td>
