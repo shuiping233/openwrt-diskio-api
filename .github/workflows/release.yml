@@ -2,9 +2,6 @@ name: Release for Multiple Platforms
 
 on:
   push:
-    branches:
-      - main
-      # - gh-action-test
     tags:
       - "v*"
 
@@ -36,11 +33,11 @@ jobs:
           cache: "pnpm"
           cache-dependency-path: frontend/pnpm-lock.yaml
 
-      - name: Install dependencies
+      - name: Install frontend dependencies
         working-directory: ./frontend
         run: pnpm install --frozen-lockfile
 
-      - name: Run GoReleaser
+      - name: Run GoReleaser build all things
         uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
