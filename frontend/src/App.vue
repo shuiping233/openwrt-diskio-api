@@ -193,7 +193,7 @@ onUnmounted(() => {
 
         <!-- Network In -->
         <div v-if="data.dynamic.network?.total?.incoming"
-          class="bg-slate-800 border border-slate-700 rounded-xl p-5 transition-all hover:-translate-y-0.5 hover:shadow-xl hover:border-slate-500">
+          class="bg-slate-800 border border-slate-700 rounded-xl p-5 flex items-center justify-between">
           <div class="text-slate-400 text-sm mb-1">网络下行</div>
           <div class="text-xl font-bold font-mono mt-1 text-cyan-500">{{
             formatBytes(data.dynamic.network.total.incoming.value) }} <span class="text-slate-400 text-sm">{{
@@ -203,7 +203,7 @@ onUnmounted(() => {
 
         <!-- Network Out -->
         <div v-if="data.dynamic.network?.total?.outgoing"
-          class="bg-slate-800 border border-slate-700 rounded-xl p-5 transition-all hover:-translate-y-0.5 hover:shadow-xl hover:border-slate-500">
+          class="bg-slate-800 border border-slate-700 rounded-xl p-5 flex items-center justify-between">
           <div class="text-slate-400 text-sm mb-1">网络上行</div>
           <div class="text-xl font-bold font-mono mt-1 text-orange-500">{{
             formatBytes(data.dynamic.network.total.outgoing.value) }} <span class="text-slate-400 text-sm">{{
