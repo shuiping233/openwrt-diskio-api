@@ -335,12 +335,12 @@ func readDiskUsage(reader FsReaderInterface, metric model.StorageMetric) {
 			continue
 		}
 
-		devSource := fields[0] // 设备名，如 /dev/mmcblk2p2 或 overlay
+		deviceName := fields[0] // 设备名，如 /dev/mmcblk2p2 或 overlay
 		mountPoint := fields[1]
 		fsType := fields[2]
 
 		// 过滤掉虚拟文件系统和不需要的
-		if strings.HasPrefix(devSource, "none") ||
+		if strings.HasPrefix(deviceName, "none") ||
 			fsType == "proc" ||
 			fsType == "sysfs" ||
 			fsType == "devtmpfs" ||
@@ -353,13 +353,13 @@ func readDiskUsage(reader FsReaderInterface, metric model.StorageMetric) {
 		// OpenWrt 特例：overlayfs 通常基于 /dev/...，但在 /proc/mounts 里可能是 "overlay"
 		// 我们可以暂时忽略 overlay 的统计，或者通过 cat /proc/mounts 找到其下层的设备
 		// 这里为了通用性，如果 devSource 看起来是个设备路径（以 /dev 开头），我们就统计它
-		if !strings.HasPrefix(devSource, "/dev/") {
+		if !strings.HasPrefix(deviceName, "/dev/") {
 			// 如果是 /dev/root 这种软链接情况，也可以处理，这里简化为只处理绝对路径
 			// 实际上 OpenWrt 的 rootfs_data 通常在 /dev/mmcblk2p2 之类
 			continue
 		}
 
-		devSource = strings.TrimPrefix(devSource, "/dev/")
+		deviceName = strings.TrimPrefix(deviceName, "/dev/")
 
 		stat, err := getStatfs(mountPoint)
 		if err != nil {
@@ -378,24 +378,33 @@ func readDiskUsage(reader FsReaderInterface, metric model.StorageMetric) {
 		convertUsed, usedUnit := utils.ConvertBytes(float64(used), model.Byte)
 		percent := float64(used) / float64(total) * 100
 
-		deviceMetric, exist := metric[devSource]
-		if !exist {
-			continue
-		}
-		deviceMetric.Total = model.MetricUnit{
-			Value: convertTotal,
-			Unit:  totalUnit,
-		}
-		deviceMetric.Used = model.MetricUnit{
-			Value: convertUsed,
-			Unit:  usedUnit,
-		}
-		deviceMetric.UsedPercent = model.MetricUnit{
-			Value: percent,
-			Unit:  model.Percent,
-		}
+		// deviceMetric, exist := metric[deviceName]
+		// if !exist {
+		// 	continue
+		// }
 
-		metric[devSource] = deviceMetric
+		metric[deviceName] = model.StorageIoMetric{
+			Read: model.MetricUnit{
+				Value: -1,
+				Unit:  "",
+			},
+			Write: model.MetricUnit{
+				Value: -1,
+				Unit:  "",
+			},
+			Total: model.MetricUnit{
+				Value: convertTotal,
+				Unit:  totalUnit,
+			},
+			Used: model.MetricUnit{
+				Value: convertUsed,
+				Unit:  usedUnit,
+			},
+			UsedPercent: model.MetricUnit{
+				Value: percent,
+				Unit:  model.Percent,
+			},
+		}
 	}
 }
 
@@ -427,28 +436,21 @@ func readDiskIoStats(reader FsReaderInterface, metric model.StorageMetric, lastS
 		readRate, readDeltaUnit := utils.ConvertBytes(readRate, model.BSecond)
 		writeRate, WriteDeltaUnit := utils.ConvertBytes(writeRate, model.BSecond)
 
-		metric[deviceName] = model.StorageIoMetric{
-			Read: model.MetricUnit{
-				Value: readRate,
-				Unit:  readDeltaUnit,
-			},
-			Write: model.MetricUnit{
-				Value: writeRate,
-				Unit:  WriteDeltaUnit,
-			},
-			Total: model.MetricUnit{
-				Value: -1,
-				Unit:  "",
-			},
-			Used: model.MetricUnit{
-				Value: -1,
-				Unit:  "",
-			},
-			UsedPercent: model.MetricUnit{
-				Value: -1,
-				Unit:  "",
-			},
+		deviceMetric, exist := metric[deviceName]
+		if !exist {
+			continue
 		}
+
+		deviceMetric.Read = model.MetricUnit{
+			Value: readRate,
+			Unit:  readDeltaUnit,
+		}
+		deviceMetric.Write = model.MetricUnit{
+			Value: writeRate,
+			Unit:  WriteDeltaUnit,
+		}
+		metric[deviceName] = deviceMetric
+
 		lastSnap[deviceName] = model.DiskSnapUnit{
 			ReadBytes:  readBytesNow,
 			WriteBytes: writeBytesNow,
@@ -711,7 +713,8 @@ func ReadStaticNetworkMetric(reader FsReaderInterface, runner CommandRunnerInter
 
 func ReadStorageMetric(reader FsReaderInterface, lastSnap model.DiskSnap, updateInterval uint) model.StorageMetric {
 	metric := model.StorageMetric{}
-	readDiskIoStats(reader, metric, lastSnap, updateInterval)
+	// only show have storage usage device
 	readDiskUsage(reader, metric)
+	readDiskIoStats(reader, metric, lastSnap, updateInterval)
 	return metric
 }
