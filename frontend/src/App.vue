@@ -432,7 +432,7 @@ onUnmounted(() => {
                 <td class="px-5 py-3 font-mono text-slate-300">{{ c.destination_ip }}{{ c.destination_port > 0 ?
                   ':' + c.destination_port : '' }}</td>
                 <td class="px-5 py-3 text-slate-300 ">{{ c.state || '-' }}</td>
-                <td class="px-5 py-3 text-slate-300 ">{{ c.traffic.value }} {{ c.traffic.unit }} ({{ c.packets }} Pkgs.)
+                <td class="px-5 py-3 text-slate-300 ">{{ c.traffic.value.toFixed(2) }} {{ c.traffic.unit }} ({{ c.packets }} Pkgs.)
                 </td>
               </tr>
               <tr v-if="!data.connection.connections || data.connection.connections.length === 0">
