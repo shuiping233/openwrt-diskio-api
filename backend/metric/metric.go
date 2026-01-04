@@ -359,6 +359,8 @@ func readDiskUsage(reader FsReaderInterface, metric model.StorageMetric) {
 			continue
 		}
 
+		devSource = strings.TrimPrefix(devSource, "/dev/")
+
 		stat, err := getStatfs(mountPoint)
 		if err != nil {
 			continue
@@ -372,24 +374,28 @@ func readDiskUsage(reader FsReaderInterface, metric model.StorageMetric) {
 			continue
 		}
 
-		convertTotal, totalUnit := utils.ConvertBytes(float64(total), model.BSecond)
-		convertUsed, usedUnit := utils.ConvertBytes(float64(used), model.BSecond)
+		convertTotal, totalUnit := utils.ConvertBytes(float64(total), model.Byte)
+		convertUsed, usedUnit := utils.ConvertBytes(float64(used), model.Byte)
 		percent := float64(used) / float64(total) * 100
 
-		metric[devSource] = model.StorageIoMetric{
-			Total: model.MetricUnit{
-				Value: convertTotal,
-				Unit:  totalUnit,
-			},
-			Used: model.MetricUnit{
-				Value: convertUsed,
-				Unit:  usedUnit,
-			},
-			UsedPercent: model.MetricUnit{
-				Value: percent,
-				Unit:  model.Percent,
-			},
+		deviceMetric, exist := metric[devSource]
+		if !exist {
+			continue
 		}
+		deviceMetric.Total = model.MetricUnit{
+			Value: convertTotal,
+			Unit:  totalUnit,
+		}
+		deviceMetric.Used = model.MetricUnit{
+			Value: convertUsed,
+			Unit:  usedUnit,
+		}
+		deviceMetric.UsedPercent = model.MetricUnit{
+			Value: percent,
+			Unit:  model.Percent,
+		}
+
+		metric[devSource] = deviceMetric
 	}
 }
 
