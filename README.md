@@ -1,29 +1,41 @@
-```go
-readProcFile("/sys/class/thermal/thermal_zone0/temp")
-readProcFile("/proc/stat")
-readProcFile("/proc/uptime")
-readProcFile("/tmp/resolv.conf.ppp")
-readProcFile("/proc/net/route")
-readProcFile("/proc/mounts")
-readProcFile("/proc/diskstats")
-readProcFile("/proc/net/dev")
-readProcFile("/proc/meminfo")
-readProcFile("/proc/net/nf_conntrack"),readProcFile("/proc/net/ip_conntrack")
-readProcFile("/proc/version")
-readProcFile("/proc/device-tree/model")
-readProcFile("/proc/sys/kernel/hostname")
+# openwrt monitor api
 
-runCommand("uname", "-r")
-runCommand("uname", "-m")
-runCommand("ip", "-o", "addr", "show")
+- 本项目由golang+vue3+TailwindCss编写,目的是给openwrt设备提供一个更好看的网页端仪表盘和更便于调用的无鉴权系统状态HTTP API
+
+> [!WARNING]  
+> 本项目仍在开发中,仪表盘页面尚未足够完善,请谨慎在生产环境使用
+
+## 工具要求
+
+- go >= 1.18
+- node.js >= 20.x
+- pnpm >= 8.x
+
+> [!WARNING]  
+> 项目后端仅支持linux发行版,并只优先适配openwrt,虽然go支持windows交叉编译linux二进制产物,但是不保证能在windows上编译成功
+
+## 编译方法
+
+1. 在任意linux发行版上,clone本项目
+2. 后端编译需要[go编译器](https://golang.google.cn/dl/)和[goreleaser](https://goreleaser.com/install/#go-install),下载和安装教程请看对应官网
+3. 前端编译需要[node.js](https://nodejs.org/zh-cn/download/)和[pnpm](https://pnpm.io/zh/installation),下载和安装教程请看对应官网
+4. 确保前置前置所需工具安装完毕后,在项目目录下,使用`goreleaser release --snapshot --clean`命令即可进行编译,编译产物默认在`./dist`目录下`
+
+### 单独手动编译前端
+
+```bash
+mkdir ./dist
+cd ./frontend
+pnpm install
+pnpm vite build --outDir ../dist/frontend  --emptyOutDir
 ```
 
+### 单独手动编译后端
 
-```go
+> [!WARNING]  
+> 需要先编译前端,因为使用了embed将前端文件打包到二进制产物中,embed找不到`./dist/frontend`文件夹可能会引起编译报错
 
-reader FsReader,
-
-
-reader.ReadFile(reader.paths.StorageDeviceMounts())
-
+```bash
+go mod tidy
+go build -o openwrt-monitor-api ./backend/main.go
 ```
