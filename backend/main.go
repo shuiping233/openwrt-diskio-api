@@ -4,7 +4,6 @@
 package main
 
 import (
-	"embed"
 	"encoding/json"
 	"flag"
 	"io/fs"
@@ -12,6 +11,7 @@ import (
 	"net/http"
 	"strconv"
 
+	frontend "openwrt-diskio-api"
 	"openwrt-diskio-api/backend/metric"
 	"openwrt-diskio-api/backend/model"
 
@@ -29,9 +29,6 @@ var (
 		Runner:                  runner,
 	}
 )
-
-//go:embed web
-var webEmb embed.FS
 
 func DynamicMetricHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -74,7 +71,7 @@ func main() {
 	go background.UpdateNetworkConnectionDetails(dynamicMetricInterval)
 	go background.UpdateStaticMetric(staticMetricInterval)
 
-	webFS, _ := fs.Sub(webEmb, "web")
+	webFS, _ := fs.Sub(frontend.WebEmb, "dist/frontend")
 	http.Handle("/", http.FileServer(http.FS(webFS)))
 
 	addr := *host + ":" + strconv.Itoa(*port)

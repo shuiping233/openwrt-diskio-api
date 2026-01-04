@@ -5,10 +5,11 @@ project_name: diskio
 before:
   hooks:
     - go mod tidy
+    
 
 builds:
   - id: diskio
-    main: ./src/main.go
+    main: ./backend/main.go
     binary: diskio
     goos:
       - linux
@@ -21,14 +22,15 @@ builds:
       - -trimpath
     ldflags:
       - -s -w
+    hooks:
+      pre: 
+      - cmd: "scripts/build-frontend.sh"
 
 upx:
   - enabled: true
     compress: best
     brute: true
 
-archives:
-  - format: binary
 checksum:
   disable: true
 changelog:
