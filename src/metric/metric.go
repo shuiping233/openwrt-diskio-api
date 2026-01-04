@@ -205,6 +205,7 @@ func parseNetworkConnectionLine(line string) (*rawConn, *rawConn) {
 	// 固定头里找 state（TCP 才有）, 固定头在tcp下就前6个元素,udp的话就前5个元素
 	if fields[model.NetConnectionIndexState] != "" && !strings.Contains(fields[model.NetConnectionIndexState], "=") {
 		origin.state = fields[model.NetConnectionIndexState]
+		reply.state = fields[model.NetConnectionIndexState]
 	}
 	// 剩下全部 key=value
 	for _, item := range fields {
@@ -214,6 +215,7 @@ func parseNetworkConnectionLine(line string) (*rawConn, *rawConn) {
 			_, exist := origin.kv[key]
 			if exist {
 				reply.kv[key] = value
+				continue
 			}
 			origin.kv[key] = value
 		}
