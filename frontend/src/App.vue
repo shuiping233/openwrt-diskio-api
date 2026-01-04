@@ -40,13 +40,13 @@ const formatTime = (): string => {
   return now.toISOString().replace('T', ' ').substring(0, 19);
 };
 
-const formatBytes = (bytes: number | undefined): string => {
-  if (!bytes || bytes === 0 || bytes === -1) return '0';
-  if (bytes >= 1073741824) return (bytes / 1073741824).toFixed(2) + ' GB';
-  if (bytes >= 1048576) return (bytes / 1048576).toFixed(2) + ' MB';
-  if (bytes >= 1024) return (bytes / 1024).toFixed(2) + ' KB';
-  return bytes.toFixed(0);
-};
+// const formatBytes = (bytes: number | undefined): string => {
+//   if (!bytes || bytes === 0 || bytes === -1) return '0';
+//   if (bytes >= 1073741824) return (bytes / 1073741824).toFixed(2) + ' GB';
+//   if (bytes >= 1048576) return (bytes / 1048576).toFixed(2) + ' MB';
+//   if (bytes >= 1024) return (bytes / 1024).toFixed(2) + ' KB';
+//   return bytes.toFixed(0);
+// };
 
 // ================= 4. 核心逻辑 =================
 
@@ -170,7 +170,7 @@ onUnmounted(() => {
         <div v-if="data.dynamic.cpu?.total?.usage"
           class="bg-slate-800 border border-slate-700 rounded-xl p-5 transition-all hover:-translate-y-0.5 hover:shadow-xl hover:border-slate-500">
           <div class="text-slate-400 text-sm mb-1">CPU 总使用率</div>
-          <div class="text-xl font-bold mt-1">{{ data.dynamic.cpu.total.usage.value.toFixed(1) }} <span
+          <div class="text-xl font-bold mt-1">{{ data.dynamic.cpu.total.usage.value.toFixed(2) }} <span
               class="text-slate-400 text-sm">{{ data.dynamic.cpu.total.usage.unit }}</span></div>
           <div class="h-1 bg-slate-700 mt-3 rounded-full overflow-hidden">
             <div class="h-full bg-violet-500 transition-all duration-500"
@@ -186,16 +186,16 @@ onUnmounted(() => {
           <div class="flex justify-between items-baseline mt-1">
             <!-- 左侧：百分比 -->
             <div class="text-xl font-bold">
-              {{ data.dynamic.memory.used_percent.value.toFixed(1) }}
+              {{ data.dynamic.memory.used_percent.value.toFixed(2) }}
               <span class="text-slate-300 text-sm ml-0.5">{{ data.dynamic.memory.used_percent.unit }}</span>
             </div>
 
             <!-- 右侧：具体使用量 -->
             <div class="text-right">
-              <span class="font-bold">{{ data.dynamic.memory.used.value.toFixed(1) }}</span>
+              <span class="font-bold">{{ data.dynamic.memory.used.value.toFixed(2) }}</span>
               <span class="text-slate-300 text-sm ml-0.5">{{ data.dynamic.memory.used.unit }}</span>
               <span class="text-slate-400 mx-1">/</span>
-              <span class="font-bold">{{ data.dynamic.memory.total.value.toFixed(1) }}</span>
+              <span class="font-bold">{{ data.dynamic.memory.total.value.toFixed(2) }}</span>
               <span class="text-slate-300 text-sm ml-0.5">{{ data.dynamic.memory.total.unit }}</span>
             </div>
           </div>
@@ -211,7 +211,7 @@ onUnmounted(() => {
           <div class="flex items-center justify-between">
             <div class="text-slate-400 text-sm">网络下行</div>
             <div class="text-xl font-bold font-mono text-cyan-500">
-              {{ formatBytes(data.dynamic.network.total.incoming.value) }}
+              {{ data.dynamic.network.total.incoming.value.toFixed(2) }}
               <span class="text-slate-400 text-sm">{{ data.dynamic.network.total.incoming.unit }}</span>
             </div>
           </div>
@@ -222,7 +222,7 @@ onUnmounted(() => {
           <div class="flex items-center justify-between">
             <div class="text-slate-400 text-sm">网络上行</div>
             <div class="text-xl font-bold font-mono text-orange-500">
-              {{ formatBytes(data.dynamic.network.total.outgoing.value) }}
+              {{ data.dynamic.network.total.outgoing.value.toFixed(2) }}
               <span class="text-slate-400 text-sm">{{ data.dynamic.network.total.outgoing.unit }}</span>
             </div>
           </div>
@@ -257,13 +257,16 @@ onUnmounted(() => {
             <div class="flex justify-between items-center mb-4">
               <span class="text-xl font-bold">{{ name }}</span>
               <span class="bg-slate-700 px-2 py-0.5 rounded text-xs font-mono text-slate-300">{{
-                dev.used_percent.value.toFixed(1) }}%</span>
+                dev.used_percent.value.toFixed(2) }}%</span>
             </div>
-            <div class="grid grid-cols-2 gap-2 text-sm mb-3">
+            <div class="grid grid-cols-3 gap-2 text-sm mb-3">
               <div><span class="text-slate-500">读:</span> {{ dev.read.value }} <span class="font-mono text-slate-200">
                   {{ dev.read.unit }}</span></div>
               <div><span class="text-slate-500">写:</span> {{ dev.write.value }} <span class="font-mono text-slate-200">
                   {{ dev.write.unit }}</span></div>
+              <div><span class="text-slate-500"></span></div>
+              <div><span class="text-slate-500">使用量:</span> <span class="font-mono">{{ dev.used_percent.value.toFixed(2) }} {{
+                dev.used_percent.unit }}</span></div>
               <div><span class="text-slate-500">总容量:</span> <span class="font-mono">{{ dev.total.value.toFixed(2) }} {{
                 dev.total.unit }}</span></div>
               <div><span class="text-slate-500">已用:</span> <span class="font-mono">{{ dev.used.value.toFixed(2) }} {{ dev.used.unit
@@ -290,7 +293,7 @@ onUnmounted(() => {
             class="bg-slate-800 border border-slate-700 rounded-xl p-5 transition-all hover:-translate-y-0.5 hover:shadow-xl">
             <div class="flex justify-between mb-2">
               <span class="text-lg font-bold">{{ name }}</span>
-              <span class="text-lg font-bold">{{ core.usage.value.toFixed(1) }}%</span>
+              <span class="text-lg font-bold">{{ core.usage.value.toFixed(2) }}%</span>
             </div>
             <div class="h-1.5 bg-slate-900 rounded-full overflow-hidden mb-2">
               <div class="h-full bg-violet-500 transition-all duration-500"
@@ -318,8 +321,8 @@ onUnmounted(() => {
               <h3 class="text-lg font-bold mb-4">{{ iface }} <span class="text-slate-500 text-sm font-normal">IO</span>
               </h3>
               <div class="flex justify-between items-center">
-                <div class="text-xl font-bold font-mono text-cyan-500">↓ {{ formatBytes(net.incoming.value) }}/s</div>
-                <div class="text-xl font-bold font-mono text-orange-500">↑ {{ formatBytes(net.outgoing.value) }}/s</div>
+                <div class="text-xl font-bold font-mono text-cyan-500">↓ {{ net.incoming.value.toFixed(2) }} {{ net.incoming.unit }} </div>
+                <div class="text-xl font-bold font-mono text-orange-500">↑ {{ net.outgoing.value.toFixed(2) }} {{ net.outgoing.unit }} </div>
               </div>
             </div>
           </template>
