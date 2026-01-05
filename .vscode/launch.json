@@ -9,7 +9,17 @@
             "type": "go",
             "request": "launch",
             "mode": "debug",
-            "program": "./backend/main.go"
+            "program": "./backend/main.go",
+            "args": [
+                // "--host",
+                // "0.0.0.0",
+                // "--port",
+                // "8080",
+                // "--dynamic-metric-interval",
+                // "2",
+                // "--static-metric-interval",
+                // "60",
+            ]
         }
     ]
 }
