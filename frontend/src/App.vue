@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, onUnmounted, type Ref } from 'vue';
+import dayjs from 'dayjs';
 import type {
   DynamicApiResponse, StaticApiResponse, ConnectionApiResponse
 } from './model';
@@ -36,8 +37,7 @@ let timer: Ref<number | null> = ref(null);
 // ================= 3. 辅助函数 =================
 
 const formatTime = (): string => {
-  const now = new Date();
-  return now.toISOString().replace('T', ' ').substring(0, 19);
+  return dayjs().format('YYYY-MM-DD HH:mm:ss')
 };
 
 // const formatBytes = (bytes: number | undefined): string => {
