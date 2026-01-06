@@ -19,6 +19,7 @@ var (
 )
 
 type rawConn struct {
+	ipFamily string
 	protocol string
 	state    string // 只有tcp有
 	kv       map[string]string
@@ -189,10 +190,12 @@ func parseNetworkConnectionLine(line string) (*rawConn, *rawConn) {
 		return nil, nil
 	}
 	origin := rawConn{
+		ipFamily: fields[model.NetConnectionIndexIpFamily],
 		protocol: fields[model.NetConnectionIndexProto],
 		kv:       make(map[string]string, len(fields)),
 	}
 	reply := rawConn{
+		ipFamily: fields[model.NetConnectionIndexIpFamily],
 		protocol: fields[model.NetConnectionIndexProto],
 		kv:       make(map[string]string, len(fields)),
 	}
@@ -641,6 +644,7 @@ func ReadConnectionMetric(reader FsReaderInterface, metric *model.NetworkConnect
 			result = append(
 				result,
 				model.NetworkConnection{
+					IpFamily:        connection.ipFamily,
 					SourceIp:        connection.kv["src"],
 					SourcePort:      utils.TryInt(connection.kv["sport"]),
 					DestinationIp:   connection.kv["dst"],

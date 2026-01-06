@@ -1,9 +1,10 @@
 package model
 
 const (
-	StringDefault           = "unknown"
-	NetConnectionIndexProto = 2 // tcp/udp/icmp
-	NetConnectionIndexState = 5 // 只有 TCP 有
+	StringDefault              = "unknown"
+	NetConnectionIndexIpFamily = 0 // ipv4/ipv6
+	NetConnectionIndexProto    = 2 // tcp/udp/icmp
+	NetConnectionIndexState    = 5 // 只有 TCP 有
 )
 
 const (
@@ -69,6 +70,7 @@ type NetworkConnectionCounts struct {
 }
 
 type NetworkConnection struct {
+	IpFamily        string     `json:"ip_family"`
 	SourceIp        string     `json:"source_ip"`
 	SourcePort      int        `json:"source_port"`
 	DestinationIp   string     `json:"destination_ip"`
@@ -82,12 +84,12 @@ type NetworkConnection struct {
 type StorageMetric map[string]StorageIoMetric
 
 type StorageIoMetric struct {
-	Read        MetricUnit  `json:"read"`
-	Write       MetricUnit  `json:"write"`
+	Read  MetricUnit `json:"read"`
+	Write MetricUnit `json:"write"`
 	// if not read storage device usage , fill -1
-	Total       MetricUnit `json:"total,omitempty"`
+	Total MetricUnit `json:"total,omitempty"`
 	// if not read storage device usage , fill -1
-	Used        MetricUnit `json:"used,omitempty"`
+	Used MetricUnit `json:"used,omitempty"`
 	// if not read storage device usage , fill -1
 	UsedPercent MetricUnit `json:"used_percent,omitempty"`
 }

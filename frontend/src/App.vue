@@ -265,12 +265,14 @@ onUnmounted(() => {
               <div><span class="text-slate-500">写:</span> {{ dev.write.value }} <span class="font-mono text-slate-200">
                   {{ dev.write.unit }}</span></div>
               <div><span class="text-slate-500"></span></div>
-              <div><span class="text-slate-500">使用量:</span> <span class="font-mono">{{ dev.used_percent.value.toFixed(2) }} {{
-                dev.used_percent.unit }}</span></div>
+              <div><span class="text-slate-500">使用量:</span> <span class="font-mono">{{ dev.used_percent.value.toFixed(2)
+                  }} {{
+                    dev.used_percent.unit }}</span></div>
               <div><span class="text-slate-500">总容量:</span> <span class="font-mono">{{ dev.total.value.toFixed(2) }} {{
                 dev.total.unit }}</span></div>
-              <div><span class="text-slate-500">已用:</span> <span class="font-mono">{{ dev.used.value.toFixed(2) }} {{ dev.used.unit
-              }}</span></div>
+              <div><span class="text-slate-500">已用:</span> <span class="font-mono">{{ dev.used.value.toFixed(2) }} {{
+                dev.used.unit
+                  }}</span></div>
             </div>
             <div class="h-1.5 bg-slate-900 rounded-full overflow-hidden mt-2">
               <div class="h-full bg-cyan-500 transition-all duration-500"
@@ -321,8 +323,10 @@ onUnmounted(() => {
               <h3 class="text-lg font-bold mb-4">{{ iface }} <span class="text-slate-500 text-sm font-normal">IO</span>
               </h3>
               <div class="flex justify-between items-center">
-                <div class="text-xl font-bold font-mono text-cyan-500">↓ {{ net.incoming.value.toFixed(2) }} {{ net.incoming.unit }} </div>
-                <div class="text-xl font-bold font-mono text-orange-500">↑ {{ net.outgoing.value.toFixed(2) }} {{ net.outgoing.unit }} </div>
+                <div class="text-xl font-bold font-mono text-cyan-500">↓ {{ net.incoming.value.toFixed(2) }} {{
+                  net.incoming.unit }} </div>
+                <div class="text-xl font-bold font-mono text-orange-500">↑ {{ net.outgoing.value.toFixed(2) }} {{
+                  net.outgoing.unit }} </div>
               </div>
             </div>
           </template>
@@ -414,6 +418,7 @@ onUnmounted(() => {
           <table class="w-full text-sm text-center border-collapse">
             <thead class="bg-slate-700/50 text-slate-300">
               <tr>
+                <th class="px-5 py-3 font-medium">地址族</th>
                 <th class="px-5 py-3 font-medium">协议</th>
                 <th class="px-5 py-3 font-medium">源地址</th>
                 <th class="px-5 py-3 font-medium">目标地址</th>
@@ -425,8 +430,12 @@ onUnmounted(() => {
               <tr v-for="(c, i) in data.connection.connections" :key="i"
                 class="hover:bg-slate-700/30 transition-colors">
                 <td class="px-5 py-3">
+                  <span class="bg-slate-700 px-2 py-1 rounded text-xs text-slate-200">{{ c.ip_family.toUpperCase()
+                    }}</span>
+                </td>
+                <td class="px-5 py-3">
                   <span class="bg-slate-700 px-2 py-1 rounded text-xs text-slate-200">{{ c.protocol.toUpperCase()
-                  }}</span>
+                    }}</span>
                 </td>
                 <td class="px-5 py-3 font-mono text-slate-300">{{ c.source_ip }}{{ c.source_port > 0 ? ':' +
                   c.source_port
@@ -435,7 +444,9 @@ onUnmounted(() => {
                 <td class="px-5 py-3 font-mono text-slate-300">{{ c.destination_ip }}{{ c.destination_port > 0 ?
                   ':' + c.destination_port : '' }}</td>
                 <td class="px-5 py-3 text-slate-300 ">{{ c.state || '-' }}</td>
-                <td class="px-5 py-3 text-slate-300 ">{{ c.traffic.value.toFixed(2) }} {{ c.traffic.unit }} ({{ c.packets }} Pkgs.)
+                <td class="px-5 py-3 text-slate-300 ">{{ c.traffic.value.toFixed(2) }} {{ c.traffic.unit }} ({{
+                  c.packets }}
+                  Pkgs.)
                 </td>
               </tr>
               <tr v-if="!data.connection.connections || data.connection.connections.length === 0">

@@ -64,6 +64,7 @@ export interface StaticApiResponse {
 
 // 连接数据结构
 export interface Connection {
+  ip_family: string;
   source_ip: string;
   source_port: number;
   destination_ip: string;
