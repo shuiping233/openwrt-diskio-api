@@ -60,15 +60,23 @@ func StaticMetricHandler(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	var (
-		host                  = flag.String("host", "127.0.0.1", "listen host")
-		port                  = flag.Int("port", 8080, "listen port")
-		dynamicMetricInterval = *flag.Uint("dynamic-metric-interval", 1, " metric update interval")
-		staticMetricInterval  = *flag.Uint("static-metric-interval", 60, " metric update interval")
+		host                      = flag.String("host", "127.0.0.1", "listen host")
+		port                      = flag.Int("port", 8080, "listen port")
+		dynamicMetricInterval     = *flag.Uint("dynamic-metric-interval", 1, " metric update interval")
+		networkConnectionInterval = *flag.Uint("network-connection-interval", 10, " network connection details update interval")
+		staticMetricInterval      = *flag.Uint("static-metric-interval", 60, " metric update interval")
 	)
 	flag.Parse()
 
+	log.Println("print input config : ")
+	log.Printf("host : %s", *host)
+	log.Printf("port : %d", *port)
+	log.Printf("dynamicMetricInterval : %v", dynamicMetricInterval)
+	log.Printf("networkConnectionInterval : %v", networkConnectionInterval)
+	log.Printf("staticMetricInterval : %v", staticMetricInterval)
+
 	go background.UpdateDynamicMetric(dynamicMetricInterval)
-	go background.UpdateNetworkConnectionDetails(dynamicMetricInterval)
+	go background.UpdateNetworkConnectionDetails(networkConnectionInterval)
 	go background.UpdateStaticMetric(staticMetricInterval)
 
 	webFS, _ := fs.Sub(frontend.WebEmb, "dist/frontend")

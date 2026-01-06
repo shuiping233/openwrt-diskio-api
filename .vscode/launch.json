@@ -19,6 +19,8 @@
                 // "2",
                 // "--static-metric-interval",
                 // "60",
+                // "--network-connection-interval",
+                // "10",
             ]
         }
     ]
