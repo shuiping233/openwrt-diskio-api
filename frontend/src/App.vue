@@ -166,7 +166,7 @@ onUnmounted(() => {
     <!-- Tabs -->
     <nav class="flex gap-2 mb-5">
       <button @click="uiState.activeTab = 'system'"
-        class="px-5 py-2 text-sm font-semibold cursor-pointer border-none transition-colors" :class="[
+        class="px-5 py-2 text-sm font-semibold cursor-pointer border border-slate-700 rounded-lg transition-colors" :class="[
           uiState.activeTab === 'system'
             ? 'text-white border-b-2 border-blue-500 bg-transparent'
             : 'text-slate-400 bg-slate-800/50 hover:bg-slate-800'
@@ -174,7 +174,7 @@ onUnmounted(() => {
         系统概览
       </button>
       <button @click="uiState.activeTab = 'network'"
-        class="px-5 py-2 text-sm font-semibold cursor-pointer border-none transition-colors" :class="[
+        class="px-5 py-2 text-sm font-semibold cursor-pointer border border-slate-700 rounded-lg transition-colors" :class="[
           uiState.activeTab === 'network'
             ? 'text-white border-b-2 border-blue-500 bg-transparent'
             : 'text-slate-400 bg-slate-800/50 hover:bg-slate-800'
