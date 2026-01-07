@@ -101,6 +101,8 @@ const fetchData = async () => {
 const startPolling = () => {
   if (timer.value) clearInterval(timer.value);
   timer.value = window.setInterval(fetchData, uiState.refreshInterval);
+  const { success } = useToast();
+  success(`刷新间隔已调整为 ${uiState.refreshInterval / 1000} 秒`);
 };
 
 // ================= 5. 生命周期 =================
@@ -141,8 +143,10 @@ onUnmounted(() => {
           class="bg-slate-800 text-white border border-slate-700 rounded px-2 py-1 outline-none focus:border-slate-500 cursor-pointer">
           <option :value="1000">1s</option>
           <option :value="2000">2s</option>
+          <option :value="3000">3s</option>
           <option :value="5000">5s</option>
           <option :value="10000">10s</option>
+          <option :value="30000">30s</option>
         </select>
 
         <span class="font-mono">{{ uiState.lastUpdated }}</span>
