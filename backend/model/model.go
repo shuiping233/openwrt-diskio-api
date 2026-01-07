@@ -69,6 +69,32 @@ type NetworkConnectionCounts struct {
 	Other uint `json:"other"`
 }
 
+func (n *NetworkConnectionCounts) AddCountTcp() {
+	n.Tcp += 1
+}
+
+func (n *NetworkConnectionCounts) AddCountUdp() {
+	n.Udp += 1
+}
+
+func (n *NetworkConnectionCounts) AddCountOther() {
+	n.Other += 1
+}
+
+// because tcp/udp/icmp counts are counted income and outcome connection ,
+// divide them by 2 is true connection counts
+func (n *NetworkConnectionCounts) DivideAllCounts() {
+	if n.Tcp > 0 {
+		n.Tcp /= 2
+	}
+	if n.Udp > 0 {
+		n.Udp /= 2
+	}
+	if n.Other > 0 {
+		n.Other /= 2
+	}
+}
+
 type NetworkConnection struct {
 	IpFamily        string     `json:"ip_family"`
 	SourceIp        string     `json:"source_ip"`

@@ -626,16 +626,16 @@ func ReadConnectionMetric(reader FsReaderInterface, metric *model.NetworkConnect
 			continue
 		}
 
-		switch originConnection.protocol {
-		case "tcp":
-			metric.Counts.Tcp++
-		case "udp":
-			metric.Counts.Udp++
-		default:
-			metric.Counts.Other++
-		}
-
 		for _, connection := range []*rawConn{originConnection, replyConnection} {
+
+			switch connection.protocol {
+			case "tcp":
+				metric.Counts.AddCountTcp()
+			case "udp":
+				metric.Counts.AddCountUdp()
+			default:
+				metric.Counts.AddCountOther()
+			}
 
 			traffic, unit := utils.ConvertBytes(
 				utils.TryFloat64(connection.kv["bytes"]),
@@ -660,6 +660,7 @@ func ReadConnectionMetric(reader FsReaderInterface, metric *model.NetworkConnect
 			)
 		}
 	}
+	metric.Counts.DivideAllCounts()
 	metric.Details = append(metric.Details, result...)
 }
 
