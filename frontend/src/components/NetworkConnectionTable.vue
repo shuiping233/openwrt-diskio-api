@@ -12,6 +12,7 @@ import {
 } from '@tanstack/vue-table';
 import type { ConnectionApiResponse } from '../model';
 import { compressIPv6 } from '../utils/ipv6';
+import { convertToBytes } from '../utils/convert';
 import { useToast } from '../useToast';
 
 // Props
@@ -73,6 +74,8 @@ const formatIP = (ip: string | undefined, family: string | undefined): string =>
 const formatBytes = (bytes: number): string => {
   return bytes < 0 ? "-1" : bytes.toFixed(2);
 };
+
+
 
 // 复制功能
 const copyInfo = (row: any) => {
@@ -193,8 +196,15 @@ const columns = [
     },
     sortingFn: (rowA, rowB) => {
       const valA = rowA.original.traffic.value || 0;
+      const unitA = rowA.original.traffic.unit || 'B';
       const valB = rowB.original.traffic.value || 0;
-      return valA - valB;
+      const unitB = rowB.original.traffic.unit || 'B';
+
+      // 将不同单位转换为字节进行比较
+      const bytesA = convertToBytes(valA, unitA);
+      const bytesB = convertToBytes(valB, unitB);
+
+      return bytesA - bytesB;
     },
     enableSorting: true,
     filterFn: (row, columnId, filterValue) => {

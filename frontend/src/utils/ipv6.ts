@@ -1,5 +1,3 @@
-// src/utils/ipv6.ts
-
 /** 将完整 IPv6 压缩成最短文本 */
 export function compressIPv6(full: string): string {
   // 1. 拆成 8 段 16 bit
