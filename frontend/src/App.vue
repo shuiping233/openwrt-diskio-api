@@ -80,7 +80,7 @@ const fetchData = async () => {
     uiState.status = '错误';
     uiState.statusColor = '#ef4444'; // red
     const { error } = useToast();
-    
+
     // 根据错误类型显示不同消息
     if (e instanceof TypeError) {
       // 网络错误，如连接失败
@@ -406,7 +406,7 @@ onUnmounted(() => {
 
     <Toaster />
   </div>
-  
+
 </template>
 
 <style></style>
