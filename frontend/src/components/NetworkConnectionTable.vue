@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, h } from 'vue';
+import { ref, computed, h, watch } from 'vue';
 import {
   useVueTable,
   getCoreRowModel,
@@ -18,10 +18,12 @@ const props = defineProps<{
   connectionData?: ConnectionApiResponse;
 }>();
 
-// 内部状态：折叠面板
-const isOpen = ref(true);
 // 全局搜索词
 const globalFilter = ref('');
+
+watch(globalFilter, (newFilter) => {
+  table.setGlobalFilter(newFilter);
+});
 
 // ================= 1. 数据聚合逻辑 =================
 const aggregatedData = computed(() => {
@@ -37,17 +39,17 @@ const aggregatedData = computed(() => {
     const key = `${c.protocol}:${endpoints[0]}<->${endpoints[1]}`;
 
     if (!groups.has(key)) {
-      groups.set(key, { 
-        ...c, 
-        _sumTraffic: 0, 
-        _sumPackets: 0 
+      groups.set(key, {
+        ...c,
+        _sumTraffic: 0,
+        _sumPackets: 0
       });
     }
-    
+
     const item = groups.get(key);
     item._sumTraffic += c.traffic.value;
     item._sumPackets += c.packets;
-    
+
     item.traffic.value = item._sumTraffic;
     item.packets = item._sumPackets;
   });
@@ -65,11 +67,7 @@ const formatIP = (ip: string | undefined, family: string | undefined): string =>
 };
 
 const formatBytes = (bytes: number): string => {
-  if (!bytes || bytes === 0 || bytes === -1) return '0';
-  if (bytes >= 1073741824) return (bytes / 1073741824).toFixed(2) + ' GB';
-  if (bytes >= 1048576) return (bytes / 1048576).toFixed(2) + ' MB';
-  if (bytes >= 1024) return (bytes / 1024).toFixed(2) + ' KB';
-  return bytes.toFixed(0);
+  return bytes.toFixed(2);
 };
 
 // 复制功能
@@ -106,7 +104,13 @@ const columns = [
       return h('span', { class: 'font-mono text-slate-300' }, formatIP(ip, row.ip_family) + (port > 0 ? ':' + port : ''));
     },
     enableSorting: false,
-    filterFn: 'includesString',
+    filterFn: (row, columnId, filterValue) => {
+      const ip = row.getValue(columnId);
+      const port = row.original.source_port;
+      const family = typeof row.original.ip_family === 'string' ? row.original.ip_family : '';
+      const fullAddress = `${formatIP(ip as string, family)}:${port}`;
+      return fullAddress.toLowerCase().includes(filterValue.toLowerCase());
+    },
   }),
   // 目标地址
   columnHelper.accessor('destination_ip', {
@@ -118,7 +122,13 @@ const columns = [
       return h('span', { class: 'font-mono text-slate-300' }, formatIP(ip, row.ip_family) + (port > 0 ? ':' + port : ''));
     },
     enableSorting: false,
-    filterFn: 'includesString',
+    filterFn: (row, columnId, filterValue) => {
+      const ip = row.getValue(columnId);
+      const port = row.original.destination_port;
+      const family = typeof row.original.ip_family === 'string' ? row.original.ip_family : '';
+      const fullAddress = `${formatIP(ip as string, family)}:${port}`;
+      return fullAddress.toLowerCase().includes(filterValue.toLowerCase());
+    },
   }),
   // 状态
   columnHelper.accessor('state', {
@@ -144,7 +154,7 @@ const columns = [
   columnHelper.display({
     id: 'actions',
     header: '操作',
-    cell: ({ row }) => h('button', { 
+    cell: ({ row }) => h('button', {
       onClick: () => copyInfo(row.original),
       class: 'text-xs bg-slate-700 hover:bg-blue-600 text-white px-2 py-1 rounded transition-colors',
       title: '复制连接信息'
@@ -205,58 +215,47 @@ const table = useVueTable({
       </div>
     </div>
 
-    <!-- Table Header & Search -->
-    <div @click="isOpen = !isOpen"
-      class="py-2.5 border-b border-slate-700 mb-5 cursor-pointer select-none flex justify-between items-center group">
+    <!-- Table Header & Search (移除折叠功能) -->
+    <div class="py-2.5 border-b border-slate-700 mb-5 flex justify-between items-center">
       <div class="flex items-center gap-4">
-        <h3 class="text-lg font-semibold text-slate-200 group-hover:text-white">连接列表</h3>
-        
-        <div class="relative" @click.stop>
-          <input 
-            v-model="globalFilter" 
-            placeholder="全局搜索..." 
-            class="bg-slate-900 border border-slate-600 text-white text-xs px-2 py-1 rounded w-48 outline-none focus:border-blue-500"
-          />
+        <h3 class="text-lg font-semibold text-slate-200">连接列表</h3>
+      </div>
+      <!-- 全局搜索框 -->
+      <div class="flex items-center gap-4">
+        <div class="relative">
+          <input v-model="globalFilter" placeholder="全局搜索..."
+            class="bg-slate-900 border border-slate-600 text-white text-xs px-2 py-1 rounded w-48 outline-none focus:border-blue-500" />
         </div>
       </div>
-      <span class="text-slate-500 transition-transform duration-300"
-        :class="{ 'rotate-180': isOpen }">▼</span>
     </div>
 
-    <!-- Table Content -->
-    <div v-show="isOpen" class="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden">
+    <!-- Table Content (移除 v-show，始终显示) -->
+    <div class="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden">
       <div class="overflow-x-auto">
         <table class="w-full text-sm text-center border-collapse">
           <thead class="bg-slate-700/50 text-slate-300">
             <tr>
               <th v-for="column in table.getHeaderGroups()[0].headers" :key="column.id"
-                class="px-3 py-3 font-medium text-left whitespace-nowrap">
-                <div class="flex flex-col gap-1">
+                class="px-3 py-3 font-medium text-center whitespace-nowrap">
+                <div class="flex flex-col gap-1 items-center">
                   <div class="flex items-center gap-1 cursor-pointer select-none hover:text-white"
                     @click="column.column.getToggleSortingHandler?.()">
-                    <!-- 修正了这里的 FlexRender 语法 -->
                     <FlexRender :render="column.column.columnDef.header" :props="column.getContext()" />
-                    <!-- 排序图标 -->
                     {{ { asc: '↑', desc: '↓' }[column.column.getIsSorted() as string] || '' }}
                   </div>
-                  
-                  <!-- 列过滤器输入框 -->
-                  <input 
-                    v-if="['source_ip', 'destination_ip'].includes(column.id)"
-                    :value="column.column.getFilterValue() ?? ''"
+
+                  <!-- 列过滤器 -->
+                  <input v-if="column.column.getCanFilter()" :value="column.column.getFilterValue() ?? ''"
                     @input="e => column.column.setFilterValue((e.target as HTMLInputElement).value)"
-                    placeholder="过滤..." 
-                    class="bg-slate-900 border border-slate-600 text-xs px-1 py-0.5 rounded w-24 text-slate-200 outline-none"
-                  />
+                    :placeholder="`过滤 ${column.column.columnDef.header as string}...`"
+                    class="bg-slate-900 border border-slate-600 text-xs px-1 py-0.5 rounded w-24 text-slate-200 outline-none" />
                 </div>
               </th>
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-700">
-            <tr v-for="row in table.getRowModel().rows" :key="row.id"
-              class="hover:bg-slate-700/30 transition-colors">
-              <td v-for="cell in row.getVisibleCells()" :key="cell.id" class="px-3 py-2">
-                <!-- 修正了这里的 FlexRender 语法 -->
+            <tr v-for="row in table.getRowModel().rows" :key="row.id" class="hover:bg-slate-700/30 transition-colors">
+              <td v-for="cell in row.getVisibleCells()" :key="cell.id" class="px-3 py-2 text-center">
                 <FlexRender :render="cell.column.columnDef.cell" :props="cell.getContext()" />
               </td>
             </tr>
