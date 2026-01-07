@@ -333,13 +333,17 @@ const table = useVueTable({
               <th v-for="column in table.getHeaderGroups()[0].headers" :key="column.id"
                 class="px-3 py-3 font-medium text-center whitespace-nowrap">
                 <div class="flex flex-col gap-1 items-center">
-                  <div class="flex items-center gap-1 cursor-pointer select-none hover:text-white" @click="() => {
-                    if (column.column.getCanSort()) {
-                      column.column.toggleSorting(undefined, column.column.getIsSorted() === false)
-                    }
-                  }">
+                  <div v-if="column.column.getCanSort()"
+                    class="flex items-center gap-1 cursor-pointer select-none hover:text-white" @click="() => {
+                      if (column.column.getCanSort()) {
+                        column.column.toggleSorting(undefined, column.column.getIsSorted() === false)
+                      }
+                    }">
                     <FlexRender :render="column.column.columnDef.header" :props="column.getContext()" />
                     {{ { asc: '↑', desc: '↓' }[column.column.getIsSorted() as string] || '' }}
+                  </div>
+                  <div v-else class="flex items-center gap-1">
+                    <FlexRender :render="column.column.columnDef.header" :props="column.getContext()" />
                   </div>
 
                   <!-- 列过滤器 -->
