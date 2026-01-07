@@ -12,6 +12,7 @@ import {
 } from '@tanstack/vue-table';
 import type { ConnectionApiResponse } from '../model';
 import { compressIPv6 } from '../utils/ipv6';
+import { useToast } from '../useToast';
 
 // Props
 const props = defineProps<{
@@ -47,6 +48,9 @@ const aggregatedData = computed(() => {
     }
 
     const item = groups.get(key);
+    if (c.traffic.value < 0) {
+      return Array.from(groups.values());
+    }
     item._sumTraffic += c.traffic.value;
     item._sumPackets += c.packets;
 
@@ -67,14 +71,15 @@ const formatIP = (ip: string | undefined, family: string | undefined): string =>
 };
 
 const formatBytes = (bytes: number): string => {
-  return bytes.toFixed(2);
+  return bytes < 0 ? "-1": bytes.toFixed(2);
 };
 
 // 复制功能
 const copyInfo = (row: any) => {
   const text = `[${row.ip_family}] ${row.protocol} ${row.source_ip}:${row.source_port} -> ${row.destination_ip}:${row.destination_port} | 状态: ${row.state} | 流量: ${row.traffic.value.toFixed(2)} ${row.traffic.unit} (${row.packets} Pkgs)`;
   navigator.clipboard.writeText(text).then(() => {
-    alert('连接信息已复制！');
+    const { success } = useToast();
+    success('连接信息已复制！');
   });
 };
 

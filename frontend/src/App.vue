@@ -5,6 +5,8 @@ import type {
   DynamicApiResponse, StaticApiResponse, ConnectionApiResponse
 } from './model';
 import NetworkConnectionTable from './components/NetworkConnectionTable.vue';
+import { useToast } from './useToast';
+import Toaster from './components/Toaster.vue';
 
 
 
@@ -74,6 +76,8 @@ const fetchData = async () => {
     console.error(e);
     uiState.status = '错误';
     uiState.statusColor = '#ef4444'; // red
+    const { error } = useToast(); // 👇 获取 error 函数
+    error(e.message); // 👇 调用 Toast
   } finally {
     uiState.isLoading = false;
     uiState.lastUpdated = reqTime;
@@ -382,7 +386,9 @@ onUnmounted(() => {
       <NetworkConnectionTable :connection-data="data.connection" />
     </div>
 
+    <Toaster />
   </div>
+  
 </template>
 
 <style></style>
