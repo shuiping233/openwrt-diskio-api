@@ -138,6 +138,18 @@ onUnmounted(() => {
       </div>
 
       <div class="flex items-center gap-2 text-sm text-slate-400">
+
+        <!-- Status Dot -->
+        <div
+          :style="{ width: '8px', height: '8px', borderRadius: '50%', background: uiState.statusColor, boxShadow: `0 0 8px ${uiState.statusColor}` }">
+        </div>
+        <span>{{ uiState.status }}</span>
+        <!-- Spinner: Using Tailwind animate-spin -->
+        <div v-if="uiState.isLoading"
+          class="w-3.5 h-3.5 border-2 border-slate-500 border-t-white rounded-full animate-spin"></div>
+
+        <span class="font-mono">{{ uiState.lastUpdated }}</span>
+
         <!-- Select -->
         <select v-model.number="uiState.refreshInterval" @change="startPolling"
           class="bg-slate-800 text-white border border-slate-700 rounded px-2 py-1 outline-none focus:border-slate-500 cursor-pointer">
@@ -149,24 +161,14 @@ onUnmounted(() => {
           <option :value="30000">30s</option>
         </select>
 
-        <span class="font-mono">{{ uiState.lastUpdated }}</span>
-
-        <!-- Status Dot -->
-        <div
-          :style="{ width: '8px', height: '8px', borderRadius: '50%', background: uiState.statusColor, boxShadow: `0 0 8px ${uiState.statusColor}` }">
-        </div>
-        <span>{{ uiState.status }}</span>
-
-        <!-- Spinner: Using Tailwind animate-spin -->
-        <div v-if="uiState.isLoading"
-          class="w-3.5 h-3.5 border-2 border-slate-500 border-t-white rounded-full animate-spin"></div>
       </div>
     </header>
 
     <!-- Tabs -->
     <nav class="flex gap-2 mb-5">
       <button @click="uiState.activeTab = 'system'"
-        class="px-5 py-2 text-sm font-semibold cursor-pointer border border-slate-700 rounded-lg transition-colors" :class="[
+        class="px-5 py-2 text-sm font-semibold cursor-pointer border border-slate-700 rounded-lg transition-colors"
+        :class="[
           uiState.activeTab === 'system'
             ? 'text-white border-b-2 border-blue-500 bg-transparent'
             : 'text-slate-400 bg-slate-800/50 hover:bg-slate-800'
@@ -174,7 +176,8 @@ onUnmounted(() => {
         系统概览
       </button>
       <button @click="uiState.activeTab = 'network'"
-        class="px-5 py-2 text-sm font-semibold cursor-pointer border border-slate-700 rounded-lg transition-colors" :class="[
+        class="px-5 py-2 text-sm font-semibold cursor-pointer border border-slate-700 rounded-lg transition-colors"
+        :class="[
           uiState.activeTab === 'network'
             ? 'text-white border-b-2 border-blue-500 bg-transparent'
             : 'text-slate-400 bg-slate-800/50 hover:bg-slate-800'
