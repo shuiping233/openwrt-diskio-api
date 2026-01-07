@@ -197,6 +197,52 @@ const columns = [
       return valA - valB;
     },
     enableSorting: true,
+    filterFn: (row, columnId, filterValue) => {
+      const trafficValue = row.original.traffic.value || 0;
+      const trafficUnit = row.original.traffic.unit || '';
+      const packets = row.original.packets || 0;
+
+      // 格式化后的值
+      const formattedValue = formatBytes(trafficValue);
+      const fullDisplayValue = `${formattedValue} ${trafficUnit} (${packets} Pkgs.)`;
+
+      // 转换为小写进行比较
+      const lowerFilterValue = filterValue.toLowerCase();
+      const lowerDisplayValue = fullDisplayValue.toLowerCase();
+
+      // 检查是否包含过滤值（支持数字和单位的搜索，忽略空格）
+      if (lowerDisplayValue.replace(/\s+/g, '').includes(lowerFilterValue.replace(/\s+/g, ''))) {
+        return true;
+      }
+
+      // 检查是否包含过滤值（支持数字和单位的搜索，保留空格）
+      if (lowerDisplayValue.includes(lowerFilterValue)) {
+        return true;
+      }
+
+      // 检查数值部分
+      if (String(trafficValue).toLowerCase().includes(lowerFilterValue)) {
+        return true;
+      }
+
+      // 检查单位部分
+      if (trafficUnit.toLowerCase().includes(lowerFilterValue)) {
+        return true;
+      }
+
+      // 检查包数
+      if (String(packets).toLowerCase().includes(lowerFilterValue)) {
+        return true;
+      }
+
+      // 检查不带空格的组合
+      const noSpaceValue = `${formattedValue}${trafficUnit}(${packets}Pkgs.)`.toLowerCase();
+      if (noSpaceValue.includes(lowerFilterValue.replace(/\s+/g, ''))) {
+        return true;
+      }
+
+      return false;
+    },
   }),
   // 操作列
   columnHelper.display({
