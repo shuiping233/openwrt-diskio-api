@@ -78,12 +78,58 @@ const formatBytes = (bytes: number): string => {
 
 
 // 复制功能
+// 复制功能
 const copyInfo = (row: any) => {
   const text = `[${row.ip_family}] ${row.protocol} ${row.source_ip}:${row.source_port} -> ${row.destination_ip}:${row.destination_port} | 状态: ${row.state} | 流量: ${row.traffic.value.toFixed(2)} ${row.traffic.unit} (${row.packets} Pkgs)`;
-  navigator.clipboard.writeText(text).then(() => {
-    const { success } = useToast();
-    success('连接信息已复制！');
-  });
+  
+  // 检查浏览器是否支持 Clipboard API
+  if (navigator.clipboard && window.isSecureContext) {
+    // 现代浏览器的安全上下文
+    navigator.clipboard.writeText(text).then(() => {
+      const { success } = useToast();
+      success('连接信息已复制！');
+    }).catch((err) => {
+      console.error('复制失败:', err);
+      // 降级到传统方法
+      fallbackCopyTextToClipboard(text);
+    });
+  } else {
+    // 降级到传统方法
+    fallbackCopyTextToClipboard(text);
+  }
+};
+
+// 传统复制方法（兼容不支持 Clipboard API 的浏览器）
+const fallbackCopyTextToClipboard = (text: string) => {
+  const textArea = document.createElement('textarea');
+  textArea.value = text;
+  
+  // 避免滚动到底部
+  textArea.style.top = '0';
+  textArea.style.left = '0';
+  textArea.style.position = 'fixed';
+  textArea.style.opacity = '0';
+  
+  document.body.appendChild(textArea);
+  textArea.focus();
+  textArea.select();
+  
+  try {
+    const successful = document.execCommand('copy');
+    if (successful) {
+      const { success } = useToast();
+      success('连接信息已复制！');
+    } else {
+      const { error } = useToast();
+      error('复制失败，请手动复制');
+    }
+  } catch (err) {
+    console.error('传统复制方法失败:', err);
+    const { error } = useToast();
+    error('复制失败，请手动复制');
+  }
+  
+  document.body.removeChild(textArea);
 };
 
 // ================= 3. TanStack Table 配置 (使用 h 函数代替 JSX 以避免 TS 解析错误) =================
