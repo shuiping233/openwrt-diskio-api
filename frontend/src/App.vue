@@ -188,12 +188,34 @@ onUnmounted(() => {
 
       <!-- 1. Summary Cards -->
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-10">
-        <!-- CPU -->
         <div v-if="data.dynamic.cpu?.total?.usage"
           class="bg-slate-800 border border-slate-700 rounded-xl p-5 transition-all hover:-translate-y-0.5 hover:shadow-xl hover:border-slate-500">
-          <div class="text-slate-400 text-sm mb-1">CPU 总使用率</div>
-          <div class="text-xl font-bold mt-1">{{ data.dynamic.cpu.total.usage.value.toFixed(2) }} <span
-              class="text-slate-400 text-sm">{{ data.dynamic.cpu.total.usage.unit }}</span></div>
+          <div class="text-slate-400 text-sm flex justify-between">CPU 总使用率
+            <span class="text-slate-400 text-sm text-right">CPU 温度</span>
+          </div>
+          <div class="flex justify-between items-baseline mt-1">
+            <!-- 左侧：CPU使用率百分比 -->
+            <div class="text-xl font-bold">
+              {{ data.dynamic.cpu.total.usage.value.toFixed(2) }}
+              <span class="text-slate-400 text-sm">{{ data.dynamic.cpu.total.usage.unit }}</span>
+            </div>
+
+            <!-- 右侧：CPU温度 -->
+            <div v-if="data.dynamic.cpu?.total?.temperature" class="text-right">
+              <div class="text-xl font-bold">
+                <span :class="{
+                  'text-white': data.dynamic.cpu.total.temperature.value < 65,
+                  'text-orange-400': data.dynamic.cpu.total.temperature.value >= 65 && data.dynamic.cpu.total.temperature.value < 80,
+                  'text-red-500': data.dynamic.cpu.total.temperature.value >= 80
+                }">
+                  {{ data.dynamic.cpu.total.temperature.value.toFixed(0) }}
+                </span>
+                <span class="text-slate-400 text-sm ml-1">{{ data.dynamic.cpu.total.temperature.unit }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- CPU 使用率进度条 -->
           <div class="h-1 bg-slate-700 mt-3 rounded-full overflow-hidden">
             <div class="h-full bg-violet-500 transition-all duration-500"
               :style="{ width: data.dynamic.cpu.total.usage.value + '%' }"></div>
