@@ -64,7 +64,10 @@ const fetchData = async () => {
       fetch('/metric/static')
     ]);
 
-    if (!dRes.ok || !cRes.ok || !sRes.ok) throw new Error('接口请求失败');
+    // 直接抛出原生错误，而不是自定义错误
+    if (!dRes.ok) throw new Error(`动态数据接口错误: ${dRes.status} ${dRes.statusText}`);
+    if (!cRes.ok) throw new Error(`网络连接接口错误: ${cRes.status} ${cRes.statusText}`);
+    if (!sRes.ok) throw new Error(`静态数据接口错误: ${sRes.status} ${sRes.statusText}`);
 
     data.dynamic = (await dRes.json()) as DynamicApiResponse;
     data.connection = (await cRes.json()) as ConnectionApiResponse;
@@ -76,8 +79,19 @@ const fetchData = async () => {
     console.error(e);
     uiState.status = '错误';
     uiState.statusColor = '#ef4444'; // red
-    const { error } = useToast(); // 👇 获取 error 函数
-    error(e.message); // 👇 调用 Toast
+    const { error } = useToast();
+    
+    // 根据错误类型显示不同消息
+    if (e instanceof TypeError) {
+      // 网络错误，如连接失败
+      error(`网络错误: ${e.message}`);
+    } else if (e.message.includes('接口错误')) {
+      // HTTP 错误状态
+      error(e.message);
+    } else {
+      // 其他错误
+      error(`请求失败: ${e.message}`);
+    }
   } finally {
     uiState.isLoading = false;
     uiState.lastUpdated = reqTime;
