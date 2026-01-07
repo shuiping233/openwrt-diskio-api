@@ -42,6 +42,7 @@ export function useToast() {
     list: toasts,
     show: showToast,
     success: (msg: string) => showToast(msg, 'success'),
-    error: (msg: string) => showToast(msg, 'error')
+    error: (msg: string) => showToast(msg, 'error'),
+    removeToast
   };
 }
