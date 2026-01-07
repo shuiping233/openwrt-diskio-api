@@ -71,7 +71,7 @@ const formatIP = (ip: string | undefined, family: string | undefined): string =>
 };
 
 const formatBytes = (bytes: number): string => {
-  return bytes < 0 ? "-1": bytes.toFixed(2);
+  return bytes < 0 ? "-1" : bytes.toFixed(2);
 };
 
 // 复制功能
@@ -92,12 +92,22 @@ const columns = [
     header: '地址族',
     cell: (info) => h('span', { class: 'bg-slate-700 px-2 py-1 rounded text-xs text-slate-200' }, info.getValue()?.toUpperCase()),
     enableSorting: true,
+    sortingFn: (rowA, rowB) => {
+      const valA = rowA.original.ip_family || '';
+      const valB = rowB.original.ip_family || '';
+      return valA.localeCompare(valB);
+    },
   }),
   // 协议
   columnHelper.accessor('protocol', {
     header: '协议',
     cell: (info) => h('span', { class: 'bg-slate-700 px-2 py-1 rounded text-xs text-slate-200' }, info.getValue()?.toUpperCase()),
     enableSorting: true,
+    sortingFn: (rowA, rowB) => {
+      const valA = rowA.original.protocol || '';
+      const valB = rowB.original.protocol || '';
+      return valA.localeCompare(valB);
+    },
   }),
   // 源地址
   columnHelper.accessor('source_ip', {
@@ -108,7 +118,21 @@ const columns = [
       const port = row.source_port;
       return h('span', { class: 'font-mono text-slate-300' }, formatIP(ip, row.ip_family) + (port > 0 ? ':' + port : ''));
     },
-    enableSorting: false,
+    enableSorting: true, // 启用排序
+    sortingFn: (rowA, rowB) => {
+      const ipA = formatIP(rowA.original.source_ip, rowA.original.ip_family);
+      const portA = rowA.original.source_port;
+      const ipB = formatIP(rowB.original.source_ip, rowB.original.ip_family);
+      const portB = rowB.original.source_port;
+
+      // 首先按IP地址排序
+      const ipComparison = ipA.localeCompare(ipB);
+      if (ipComparison !== 0) {
+        return ipComparison;
+      }
+      // IP相同时按端口号数值排序
+      return portA - portB;
+    },
     filterFn: (row, columnId, filterValue) => {
       const ip = row.getValue(columnId);
       const port = row.original.source_port;
@@ -126,7 +150,21 @@ const columns = [
       const port = row.destination_port;
       return h('span', { class: 'font-mono text-slate-300' }, formatIP(ip, row.ip_family) + (port > 0 ? ':' + port : ''));
     },
-    enableSorting: false,
+    enableSorting: true, // 启用排序
+    sortingFn: (rowA, rowB) => {
+      const ipA = formatIP(rowA.original.destination_ip, rowA.original.ip_family);
+      const portA = rowA.original.destination_port;
+      const ipB = formatIP(rowB.original.destination_ip, rowB.original.ip_family);
+      const portB = rowB.original.destination_port;
+
+      // 首先按IP地址排序
+      const ipComparison = ipA.localeCompare(ipB);
+      if (ipComparison !== 0) {
+        return ipComparison;
+      }
+      // IP相同时按端口号数值排序
+      return portA - portB;
+    },
     filterFn: (row, columnId, filterValue) => {
       const ip = row.getValue(columnId);
       const port = row.original.destination_port;
@@ -140,6 +178,11 @@ const columns = [
     header: '状态',
     cell: (info) => h('span', { class: 'text-slate-300' }, info.getValue() || '-'),
     enableSorting: true,
+    sortingFn: (rowA, rowB) => {
+      const valA = rowA.original.state || '';
+      const valB = rowB.original.state || '';
+      return valA.localeCompare(valB);
+    },
   }),
   // 传输情况
   columnHelper.accessor('traffic', {
@@ -164,6 +207,7 @@ const columns = [
       class: 'text-xs bg-slate-700 hover:bg-blue-600 text-white px-2 py-1 rounded transition-colors',
       title: '复制连接信息'
     }, '复制'),
+    enableSorting: false, // 禁用排序
   }),
 ];
 
@@ -171,12 +215,12 @@ const columns = [
 const initialSorting = [{ id: 'traffic', desc: true }];
 
 const table = useVueTable({
-  data: aggregatedData, // 修复：直接传入响应式引用，而不是 getter 函数
+  data: aggregatedData,
   columns,
   getCoreRowModel: getCoreRowModel(),
   getSortedRowModel: getSortedRowModel(),
   getFilteredRowModel: getFilteredRowModel(),
-  getRowId: (row) => row.index,
+  getRowId: (row) => `${row.source_ip}-${row.source_port}-${row.destination_ip}-${row.destination_port}-${row.protocol}`, // 使用连接的唯一标识
   initialState: {
     sorting: initialSorting,
     columnFilters: [],
@@ -243,8 +287,11 @@ const table = useVueTable({
               <th v-for="column in table.getHeaderGroups()[0].headers" :key="column.id"
                 class="px-3 py-3 font-medium text-center whitespace-nowrap">
                 <div class="flex flex-col gap-1 items-center">
-                  <div class="flex items-center gap-1 cursor-pointer select-none hover:text-white"
-                    @click="column.column.getToggleSortingHandler?.()">
+                  <div class="flex items-center gap-1 cursor-pointer select-none hover:text-white" @click="() => {
+                    if (column.column.getCanSort()) {
+                      column.column.toggleSorting(undefined, column.column.getIsSorted() === false)
+                    }
+                  }">
                     <FlexRender :render="column.column.columnDef.header" :props="column.getContext()" />
                     {{ { asc: '↑', desc: '↓' }[column.column.getIsSorted() as string] || '' }}
                   </div>
