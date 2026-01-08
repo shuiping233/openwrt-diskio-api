@@ -266,3 +266,140 @@ config system
 		})
 	}
 }
+
+func TestSelectPrivateAddress(t *testing.T) {
+
+	privateCidr := []string{
+		"192.168.0.0/24",
+	}
+
+	type result struct {
+		srcAddr string
+		srcPort int
+		dstAddr string
+		dstPort int
+	}
+
+	testCases := []struct {
+		testName                string
+		originConnectionSrcAddr string
+		replyConnectionSrcAddr  string
+		originConnectionSrcPort int
+		replyConnectionSrcPort  int
+		originConnectionDstAddr string
+		replyConnectionDstAddr  string
+		originConnectionDstPort int
+		replyConnectionDstPort  int
+		expected                result
+	}{
+		{
+			// ipv4     2 udp      17 33 src=192.168.0.249 dst=175.153.161.77 sport=9993 dport=44315 packets=1 bytes=56 [UNREPLIED] src=175.153.161.77 dst=112.93.49.21 sport=44315 dport=9993 packets=0 bytes=0 mark=0 zone=0 use=2
+			testName:                "nat outbound",
+			originConnectionSrcAddr: "192.168.0.249",
+			originConnectionDstAddr: "175.153.161.77",
+			originConnectionSrcPort: 9993,
+			originConnectionDstPort: 44315,
+			replyConnectionSrcAddr:  "175.153.161.77",
+			replyConnectionDstAddr:  "112.93.49.21",
+			replyConnectionSrcPort:  44315,
+			replyConnectionDstPort:  9993,
+			expected: result{
+				srcAddr: "192.168.0.249",
+				srcPort: 9993,
+				dstAddr: "175.153.161.77",
+				dstPort: 44315,
+			},
+		},
+		{
+			// ipv4     2 tcp      6 7428 ESTABLISHED src=110.42.53.227 dst=112.93.49.21 sport=39451 dport=10091 packets=18086 bytes=1096158 src=192.168.0.173 dst=110.42.53.227 sport=10091 dport=39451 packets=18031 bytes=1159253 [ASSURED] mark=0 zone=0 use=2
+			testName:                "nat inbound",
+			originConnectionSrcAddr: "110.42.53.227",
+			originConnectionDstAddr: "112.93.49.21",
+			originConnectionSrcPort: 39451,
+			originConnectionDstPort: 10091,
+			replyConnectionSrcAddr:  "192.168.0.173",
+			replyConnectionDstAddr:  "110.42.53.227",
+			replyConnectionSrcPort:  10091,
+			replyConnectionDstPort:  39451,
+			expected: result{
+				srcAddr: "110.42.53.227",
+				srcPort: 39451,
+				dstAddr: "192.168.0.173",
+				dstPort: 10091,
+			},
+		},
+		{
+			// ipv4     2 udp      17 38 src=192.168.0.249 dst=192.168.0.1 sport=65268 dport=5351 packets=1 bytes=30 [UNREPLIED] src=192.168.0.1 dst=192.168.0.249 sport=5351 dport=65268 packets=0 bytes=0 mark=0 zone=0 use=2
+			testName:                "all private address",
+			originConnectionSrcAddr: "192.168.0.249",
+			originConnectionDstAddr: "192.168.0.1",
+			originConnectionSrcPort: 65268,
+			originConnectionDstPort: 5351,
+			replyConnectionSrcAddr:  "192.168.0.1",
+			replyConnectionDstAddr:  "192.168.0.249",
+			replyConnectionSrcPort:  5351,
+			replyConnectionDstPort:  65268,
+			expected: result{
+				srcAddr: "192.168.0.249",
+				srcPort: 65268,
+				dstAddr: "192.168.0.1",
+				dstPort: 5351,
+			},
+		},
+		{
+			// ipv4     2 udp      17 53 src=112.93.49.21 dst=116.116.116.116 sport=53441 dport=53 packets=1 bytes=74 src=116.116.116.116 dst=112.93.49.21 sport=53 dport=53441 packets=1 bytes=114 mark=0 zone=0 use=2
+			testName:                "all public address",
+			originConnectionSrcAddr: "112.93.49.21",
+			originConnectionDstAddr: "116.116.116.116",
+			originConnectionSrcPort: 53441,
+			originConnectionDstPort: 53,
+			replyConnectionSrcAddr:  "116.116.116.116",
+			replyConnectionDstAddr:  "112.93.49.21",
+			replyConnectionSrcPort:  53,
+			replyConnectionDstPort:  53441,
+			expected: result{
+				srcAddr: "112.93.49.21",
+				srcPort: 53441,
+				dstAddr: "116.116.116.116",
+				dstPort: 53,
+			},
+		},
+		{
+			// ipv4     2 unknown  2 500 src=192.168.0.249 dst=224.0.0.252 packets=11880 bytes=380160 [UNREPLIED] src=224.0.0.252 dst=192.168.0.249 packets=0 bytes=0 mark=0 zone=0 use=2
+			testName:                "unknown protocol no port",
+			originConnectionSrcAddr: "192.168.0.249",
+			originConnectionDstAddr: "224.0.0.252",
+			originConnectionSrcPort: -1,
+			originConnectionDstPort: -1,
+			replyConnectionSrcAddr:  "224.0.0.252",
+			replyConnectionDstAddr:  "192.168.0.249",
+			replyConnectionSrcPort:  -1,
+			replyConnectionDstPort:  -1,
+			expected: result{
+				srcAddr: "192.168.0.249",
+				srcPort: -1,
+				dstAddr: "224.0.0.252",
+				dstPort: -1,
+			},
+		},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.testName, func(t *testing.T) {
+			srcAddr, srcPort, dstAddr, dstPort := selectPrivateAddress(
+				testCase.originConnectionSrcAddr,
+				testCase.replyConnectionSrcAddr,
+				testCase.originConnectionSrcPort,
+				testCase.replyConnectionSrcPort,
+				testCase.originConnectionDstAddr,
+				testCase.replyConnectionDstAddr,
+				testCase.originConnectionDstPort,
+				testCase.replyConnectionDstPort,
+				privateCidr,
+			)
+			assert.Equal(t, testCase.expected.srcAddr, srcAddr)
+			assert.Equal(t, testCase.expected.srcPort, srcPort)
+			assert.Equal(t, testCase.expected.dstAddr, dstAddr)
+			assert.Equal(t, testCase.expected.dstPort, dstPort)
+		})
+	}
+}

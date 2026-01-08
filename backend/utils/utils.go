@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"openwrt-diskio-api/backend/model"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -135,4 +136,12 @@ func TryFloat64(input string) float64 {
 		return -1
 	}
 	return result
+}
+
+func All(bb []bool) bool {
+	return !slices.Contains(bb, false)
+}
+
+func Any(bb []bool) bool {
+	return slices.Contains(bb, true)
 }

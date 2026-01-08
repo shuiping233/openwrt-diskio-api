@@ -28,9 +28,11 @@ watch(globalFilter, (newFilter) => {
   table.setGlobalFilter(newFilter);
 });
 
-// ================= 1. 数据聚合逻辑 =================
 const displayData = computed(() => {
-  return props.connectionData?.connections || [];
+  const list = props.connectionData?.connections || [];
+  if (list.length === 0) return [];
+  return list;
+  
 });
 
 // ================= 2. 辅助函数 =================
@@ -293,11 +295,18 @@ const table = useVueTable({
   getCoreRowModel: getCoreRowModel(),
   getSortedRowModel: getSortedRowModel(),
   getFilteredRowModel: getFilteredRowModel(),
-  getRowId: (row) => `${row.source_ip}-${row.source_port}-${row.destination_ip}-${row.destination_port}-${row.protocol}`, // 使用连接的唯一标识
-  initialState: {
-    sorting: initialSorting,
-    columnFilters: [],
-    globalFilter: globalFilter.value,
+  getRowId: (row) => {
+    // 创建一个标准化的连接标识符，确保无论连接方向如何，相同的连接对都有相同的ID
+    const endpoints = [
+      `${row.source_ip}:${row.source_port}`,
+      `${row.destination_ip}:${row.destination_port}`
+    ].sort(); // 排序确保 A->B 和 B->A 被视为同一连接对
+    
+    // 添加一个索引以确保唯一性，以防后端返回完全相同的条目
+    const baseId = `${endpoints[0]}<->${endpoints[1]}-${row.protocol}`;
+    
+    // 如果需要绝对唯一性，可以添加一个时间戳或随机数
+    return `${baseId}-${Date.now()}-${Math.random()}`.replace(/\./g, '');
   },
   globalFilterFn: (row, columnId, value) => {
     const search = String(value).toLowerCase();

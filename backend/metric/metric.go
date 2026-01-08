@@ -645,18 +645,36 @@ func ReadSystemMetric(reader FsReaderInterface) model.SystemMetric {
 	return result
 }
 
-func selectPrivateAddress(originConnectionAddr string, replyConnectionAddr string, originConnectionPort int, replyConnectionPort int, privateCidr []string) (string, int) {
-	isOriginAddrInSubnets := utils.IsIpInSubnets(originConnectionAddr, privateCidr)
-	isReplyAddrInSubnets := utils.IsIpInSubnets(replyConnectionAddr, privateCidr)
+func selectPrivateAddress(
+	originConnectionSrcAddr string,
+	replyConnectionSrcAddr string,
+	originConnectionSrcPort int,
+	replyConnectionSrcPort int,
+	originConnectionDstAddr string,
+	replyConnectionDstAddr string,
+	originConnectionDstPort int,
+	replyConnectionDstPort int,
 
-	if !isOriginAddrInSubnets && !isReplyAddrInSubnets {
-		return originConnectionAddr, originConnectionPort
+	privateCidr []string) (srcAddr string, srcPort int, dstAddr string, dstPort int) {
+	isOriginSrcAddrInSubnets := utils.IsIpInSubnets(originConnectionSrcAddr, privateCidr)
+	isOriginDstAddrInSubnets := utils.IsIpInSubnets(originConnectionDstAddr, privateCidr)
+	isReplySrcAddrInSubnets := utils.IsIpInSubnets(replyConnectionSrcAddr, privateCidr)
+	isReplyDstAddrInSubnets := utils.IsIpInSubnets(replyConnectionDstAddr, privateCidr)
+
+	if utils.All([]bool{isOriginDstAddrInSubnets, isOriginSrcAddrInSubnets, isReplyDstAddrInSubnets, isReplySrcAddrInSubnets}) {
+		return originConnectionSrcAddr, originConnectionSrcPort, originConnectionDstAddr, originConnectionDstPort
 	}
 
-	if isOriginAddrInSubnets {
-		return originConnectionAddr, originConnectionPort
+	if isOriginSrcAddrInSubnets || isOriginDstAddrInSubnets {
+		return originConnectionSrcAddr, originConnectionSrcPort, originConnectionDstAddr, originConnectionDstPort
 	}
-	return replyConnectionAddr, replyConnectionPort
+
+	if isReplySrcAddrInSubnets || isReplyDstAddrInSubnets {
+		return replyConnectionDstAddr, replyConnectionDstPort, replyConnectionSrcAddr, replyConnectionSrcPort
+	}
+
+	return originConnectionSrcAddr, originConnectionSrcPort, originConnectionDstAddr, originConnectionDstPort
+
 }
 
 func ReadConnectionMetric(reader FsReaderInterface, metric *model.NetworkConnectionMetric, privateCidr []string) {
@@ -699,16 +717,14 @@ func ReadConnectionMetric(reader FsReaderInterface, metric *model.NetworkConnect
 
 		var sourceIp, destinationIp string
 		var sourcePort, destinationPort int
+
 		if originConnection.ipFamily == "ipv4" {
 			// ipv4 has NAT
-			sourceIp, sourcePort = selectPrivateAddress(
+			sourceIp, sourcePort, destinationIp, destinationPort = selectPrivateAddress(
 				originConnection.kv["src"],
 				replyConnection.kv["src"],
 				utils.TryInt(originConnection.kv["sport"]),
 				utils.TryInt(replyConnection.kv["sport"]),
-				privateCidr,
-			)
-			destinationIp, destinationPort = selectPrivateAddress(
 				originConnection.kv["dst"],
 				replyConnection.kv["dst"],
 				utils.TryInt(originConnection.kv["dport"]),
@@ -723,20 +739,13 @@ func ReadConnectionMetric(reader FsReaderInterface, metric *model.NetworkConnect
 			destinationPort = utils.TryInt(originConnection.kv["dport"])
 		}
 
-		originTraffic, unit := utils.ConvertBytes(
-			utils.TryFloat64(originConnection.kv["bytes"]),
-			model.Byte,
-		)
-		replyTraffic, unit := utils.ConvertBytes(
-			utils.TryFloat64(replyConnection.kv["bytes"]),
-			model.Byte,
-		)
-
-		traffic := originTraffic
+		traffic := utils.TryFloat64(originConnection.kv["bytes"])
+		replyTraffic := utils.TryFloat64(replyConnection.kv["bytes"])
 
 		if replyTraffic > 0 {
 			traffic += replyTraffic
 		}
+		traffic, unit := utils.ConvertBytes(traffic, model.Byte)
 
 		originPackets := utils.TryInt64(originConnection.kv["packets"])
 		replyPackets := utils.TryInt64(replyConnection.kv["packets"])
