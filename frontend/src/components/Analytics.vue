@@ -113,7 +113,6 @@ function getBaseOption(title: string, color: string): EChartsOption {
     };
 }
 
-
 // 从 DB 加载历史数据，并直接赋值给 Option
 const loadHistoryAndRender = async (key: string) => {
     const range = chartStates[key].range;
@@ -122,15 +121,20 @@ const loadHistoryAndRender = async (key: string) => {
     // ECharts Time Axis 格式: [[t1, v1], [t2, v2]]
     const seriesData = data.map(item => [item.timestamp, item.value] as [number, number]);
 
-    // 修复 yAxis 类型
-    const yAxis = chartOptions[key].yAxis as {
-        axisLabel?: {
-            formatter?: string;
-        };
-    };
+    // 更新图表数据
+    (chartOptions[key].series as any)[0].data = seriesData;
 
+    // 更新 Y 轴单位显示
+    const yAxis = chartOptions[key].yAxis as any;
     const unit = data.length > 0 ? data[0].unit : '%';
     yAxis.axisLabel = { formatter: `{value} ${unit}` };
+    
+    // 更新 tooltip 单位
+    const tooltip = chartOptions[key].tooltip as any;
+    tooltip.formatter = (params: any) => {
+        const param = params[0];
+        return `${param.seriesName}<br/>${new Date(param.axisValue).toLocaleString()}<br/>${param.value[1]} ${unit}`;
+    };
 };
 
 // ================= 核心逻辑：流式更新 =================
@@ -148,12 +152,15 @@ const appendDataPoint = (key: string, timestamp: number, value: number, unit: st
     }
 
     // 更新 Y 轴单位显示
-    const yAxis = chartOptions[key].yAxis as {
-        axisLabel?: {
-            formatter?: string;
-        };
-    };
+    const yAxis = chartOptions[key].yAxis as any;
     yAxis.axisLabel = { formatter: `{value} ${unit}` };
+    
+    // 更新 tooltip 单位
+    const tooltip = chartOptions[key].tooltip as any;
+    tooltip.formatter = (params: any) => {
+        const param = params[0];
+        return `${param.seriesName}<br/>${new Date(param.axisValue).toLocaleString()}<br/>${param.value[1]} ${unit}`;
+    };
 
     // 异步存入 DB
     addHistoryBatch([{
@@ -188,8 +195,8 @@ watch(() => props.data.dynamic, (newData) => {
     if (memUsage?.value !== undefined) appendDataPoint('memory', now, memUsage.value, memUsage.unit);
 
     // Network
-    const netIn = newData.network?.total?.incoming;
-    const netOut = newData.network?.total?.outgoing;
+    const netIn = newData.network?.['pppoe-wan']?.incoming;
+    const netOut = newData.network?.['pppoe-wan']?.outgoing;
     if (netIn?.value !== undefined) appendDataPoint('network_in', now, netIn.value, netIn.unit);
     if (netOut?.value !== undefined) appendDataPoint('network_out', now, netOut.value, netOut.unit);
 
@@ -258,13 +265,13 @@ onMounted(async () => {
                 class="bg-slate-800 border border-slate-700 rounded-xl p-4 relative group">
                 <!-- 时间选择器 -->
                 <select v-model="chartStates[key].range" @change="handleRangeChange(key)"
-                    class="absolute top-4 right-4 z-10 bg-slate-900 border border-slate-600 text-xs text-slate-300 px-2 py-1 rounded outline-none opacity-0 group-hover:opacity-100 transition-opacity">
+                    class="absolute top-6 right-16 z-10 bg-slate-900 border border-slate-600 text-xs text-slate-300 px-2 py-1 rounded outline-none opacity-0 group-hover:opacity-100 transition-opacity">
                     <option v-for="r in timeRanges" :key="r.value" :value="r.value">{{ r.label }}</option>
                 </select>
 
                 <!-- vue-echarts 组件 -->
                 <!-- 注意：设置 height 否则可能显示不全 -->
-                <v-chart :option="opt" :autoresize="true" style="height: 320px ;" />
+                <v-chart :option="opt" :autoresize="true" style="height: 320px;" />
             </div>
 
         </div>
