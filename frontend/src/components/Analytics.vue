@@ -113,6 +113,13 @@ function getBaseOption(title: string, color: string): EChartsOption {
     };
 }
 
+// 过滤超出时间范围的数据点
+function filterDataByTimeRange(data: [number, number][], range: number): [number, number][] {
+    const now = Date.now();
+    const cutoffTime = now - range;
+    return data.filter(([timestamp]) => timestamp >= cutoffTime);
+}
+
 // 从 DB 加载历史数据，并直接赋值给 Option
 const loadHistoryAndRender = async (key: string) => {
     const range = chartStates[key].range;
@@ -146,10 +153,9 @@ const appendDataPoint = (key: string, timestamp: number, value: number, unit: st
     // 推入新数据
     seriesArr.push([timestamp, value]);
 
-    // 内存保护：如果点太多，移除旧点
-    if (seriesArr.length > 500) {
-        seriesArr.shift();
-    }
+    // 根据时间范围过滤数据，移除超出范围的数据点
+    const filteredData = filterDataByTimeRange(seriesArr, chartStates[key].range);
+    (chartOptions[key].series as any)[0].data = filteredData;
 
     // 更新 Y 轴单位显示
     const yAxis = chartOptions[key].yAxis as any;
