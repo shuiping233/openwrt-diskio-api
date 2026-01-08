@@ -80,3 +80,17 @@ export interface ConnectionApiResponse {
   connections?: Connection[];
 }
 
+// ================= 历史数据结构 =================
+export interface HistoryRecord {
+  id?: number; // Dexie 自增 ID
+  timestamp: number; // 时间戳
+  metric: 'cpu' | 'cpu_temp' | 'memory' | 'network_in' | 'network_out' | 'storage_io';
+  value: number; // 数值
+  unit: string; // 单位
+}
+
+// ================= 用户配置结构 =================
+export interface UserSetting {
+  key: string; // 键名，例如 'retention_days', 'theme'
+  value: string | number | boolean; // 值
+}

@@ -6,6 +6,7 @@ import type {
 } from './model';
 import NetworkConnectionTable from './components/NetworkConnectionTable.vue';
 import SystemOverview from './components/SystemOverview.vue';
+import Analytics from './components/Analytics.vue';
 import { useToast } from './useToast';
 import Toaster from './components/Toaster.vue';
 
@@ -20,7 +21,7 @@ const data = reactive({
 });
 
 const uiState = reactive({
-  activeTab: 'system' as 'system' | 'network',
+  activeTab: 'system' as 'system' | 'network' | 'analytics',
   refreshInterval: 2000,
   lastUpdated: '--',
   isLoading: false,
@@ -176,6 +177,15 @@ onUnmounted(() => {
         ]">
         网络连接
       </button>
+      <button @click="uiState.activeTab = 'analytics'"
+        class="px-5 py-2 text-sm font-semibold cursor-pointer border border-slate-700 rounded-lg transition-colors"
+        :class="[
+          uiState.activeTab === 'analytics'
+            ? 'text-white border-b-2 border-blue-500 bg-transparent'
+            : 'text-slate-400 bg-slate-800/50 hover:bg-slate-800'
+        ]">
+        历史数据分析
+      </button>
     </nav>
 
     <!-- Tab: System Overview -->
@@ -187,6 +197,10 @@ onUnmounted(() => {
     <div v-if="uiState.activeTab === 'network'" class="p-0"> <!-- p-0 可以根据需要调整 -->
       <!-- 👇 使用组件，传入连接数据 -->
       <NetworkConnectionTable :connection-data="data.connection" />
+    </div>
+    <!-- Tab: Analytics -->
+    <div v-if="uiState.activeTab === 'analytics'">
+      <Analytics />
     </div>
 
     <Toaster />
