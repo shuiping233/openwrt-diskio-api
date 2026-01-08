@@ -12,7 +12,7 @@ import {
 } from '@tanstack/vue-table';
 import type { ConnectionApiResponse } from '../model';
 import { compressIPv6 } from '../utils/ipv6';
-import { convertToBytes } from '../utils/convert';
+import { convertToBytes,formatBytes } from '../utils/convert';
 import { useToast } from '../useToast';
 
 // Props
@@ -58,9 +58,6 @@ const formatIP = (ip: string | undefined, family: string | undefined): string =>
   return ip;
 };
 
-const formatBytes = (bytes: number): string => {
-  return bytes < 0 ? "-1" : bytes.toFixed(2);
-};
 
 
 
@@ -225,7 +222,7 @@ const columns = [
     header: '传输情况',
     cell: (info) => {
       const row = info.row.original;
-      return h('span', { class: 'text-slate-300' }, formatBytes(row.traffic.value) + ' ' + row.traffic.unit + ' (' + row.packets + ' Pkgs.)');
+      return h('span', { class: 'text-slate-300' }, formatBytes(row.traffic.value,row.traffic.unit) + ' ' + row.traffic.unit + ' (' + row.packets + ' Pkgs.)');
     },
     sortingFn: (rowA, rowB) => {
       const valA = rowA.original.traffic.value || 0;
@@ -246,7 +243,7 @@ const columns = [
       const packets = row.original.packets || 0;
 
       // 格式化后的值
-      const formattedValue = formatBytes(trafficValue);
+      const formattedValue = formatBytes(trafficValue, trafficUnit);
       const fullDisplayValue = `${formattedValue} ${trafficUnit} (${packets} Pkgs.)`;
 
       // 转换为小写进行比较
