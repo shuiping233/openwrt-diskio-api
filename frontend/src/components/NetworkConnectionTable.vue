@@ -53,7 +53,7 @@ const displayData = computed(() => {
 const formatIP = (ip: string | undefined, family: string | undefined): string => {
   if (!ip) return '-';
   if (family?.toUpperCase() === 'IPV6') {
-    return compressIPv6(ip);
+    return `[${compressIPv6(ip)}]`;
   }
   return ip;
 };
