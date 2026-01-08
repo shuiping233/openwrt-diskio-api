@@ -51,7 +51,7 @@ const uiState = reactive({
                                 {{ data.dynamic.cpu.total.temperature.value.toFixed(0) }}
                             </span>
                             <span class="text-slate-400 text-sm ml-1">{{ data.dynamic.cpu.total.temperature.unit
-                            }}</span>
+                                }}</span>
                         </div>
                     </div>
                 </div>
@@ -103,7 +103,7 @@ const uiState = reactive({
                         <div class="text-xl font-bold font-mono text-orange-500">
                             {{ data.dynamic.network['pppoe-wan'].outgoing.value.toFixed(2) }}
                             <span class="text-slate-400 text-sm">{{ data.dynamic.network['pppoe-wan'].outgoing.unit
-                                }}</span>
+                            }}</span>
                         </div>
                     </div>
 
@@ -114,7 +114,7 @@ const uiState = reactive({
                         <div class="text-xl font-bold font-mono text-cyan-500">
                             {{ data.dynamic.network['pppoe-wan'].incoming.value.toFixed(2) }}
                             <span class="text-slate-400 text-sm">{{ data.dynamic.network['pppoe-wan'].incoming.unit
-                                }}</span>
+                            }}</span>
                         </div>
                     </div>
                 </div>
@@ -129,7 +129,7 @@ const uiState = reactive({
                     <div class="text-xl font-bold font-mono text-orange-500">
                         {{ data.dynamic.network.total.incoming.value.toFixed(2) }}
                         <span class="text-slate-400 text-sm">{{ data.dynamic.network.total.incoming.unit
-                            }}</span>
+                        }}</span>
                     </div>
                 </div>
 
@@ -140,7 +140,7 @@ const uiState = reactive({
                     <div class="text-xl font-bold font-mono text-cyan-500">
                         {{ data.dynamic.network.total.outgoing.value.toFixed(2) }}
                         <span class="text-slate-400 text-sm">{{ data.dynamic.network.total.outgoing.unit
-                            }}</span>
+                        }}</span>
                     </div>
                 </div>
             </div>
@@ -250,7 +250,7 @@ const uiState = reactive({
                                 data.dynamic.network.total.incoming.unit }} </div>
                         <div class="text-xl font-bold font-mono text-orange-500">↑ {{
                             data.dynamic.network.total.outgoing.value.toFixed(2)
-                            }} {{
+                        }} {{
                                 data.dynamic.network.total.outgoing.unit }} </div>
                     </div>
                 </div>
@@ -267,7 +267,7 @@ const uiState = reactive({
                                 {{
                                     net.incoming.unit }} </div>
                             <div class="text-xl font-bold font-mono text-orange-500">↑ {{ net.outgoing.value.toFixed(2)
-                            }} {{
+                                }} {{
                                     net.outgoing.unit }} </div>
                         </div>
                     </div>
@@ -290,6 +290,14 @@ const uiState = reactive({
                     class="bg-slate-800 border border-slate-700 rounded-xl p-5 flex flex-col justify-center">
                     <h3 class="text-slate-400 text-sm mb-2">网关</h3>
                     <div class="text-2xl font-bold font-mono">{{ data.static.network.global.gateway }}</div>
+                </div>
+                <!-- DNS -->
+                <div v-if="data.static.network?.global?.dns && data.static.network.global.dns.length > 0"
+                    class="bg-slate-800 border border-slate-700 rounded-xl p-5 flex flex-col justify-center">
+                    <h3 class="text-slate-400 text-sm mb-2">DNS</h3>
+                    <template v-for="dns in data.static.network.global.dns" :key="dns">
+                        <div class="text-2xl font-bold font-mono">{{ dns }}</div>
+                    </template>
                 </div>
             </div>
         </div>

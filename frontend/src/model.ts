@@ -46,7 +46,7 @@ export interface IpConfig {
 }
 
 export interface NetworkStaticData {
-  [key: string]: IpConfig & { gateway?: string };
+  [key: string]: IpConfig & { gateway?: string ; dns?: string[] }  ;
 }
 
 export interface SystemStaticData {
