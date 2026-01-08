@@ -12,10 +12,10 @@ import {
     TransformComponent,
     ToolboxComponent
 } from 'echarts/components';
-import { LabelLayout, UniversalTransition } from 'echarts/features';
 import type { EChartsOption } from 'echarts';
 import { useDatabase } from '../useDatabase'; // 注意路径可能要根据实际项目调整
 import type { HistoryRecord, DynamicApiResponse } from '../model'; // 注意路径
+import { normalizeToBytes, formatIOBytes } from '../utils/convert';
 
 // 注册 ECharts 组件
 use([
@@ -39,34 +39,6 @@ const props = defineProps<{
 const { addHistoryBatch, getHistory } = useDatabase();
 
 // ================= 常量与辅助函数 =================
-
-// 1. 核心转换：将任意单位转换为 Bytes/s (归一化标准)
-function normalizeToBytes(value: number, unit: string): number {
-    const u = unit.toUpperCase();
-    if (u.includes('B/S') || u.includes('/S') || u === 'B') {
-        // 速率或字节数
-        if (u.includes('PB')) return value * 1000 * 1000 * 1000 * 1000 * 1000;
-        if (u.includes('TB')) return value * 1000 * 1000 * 1000 * 1000;
-        if (u.includes('GB')) return value * 1000 * 1000 * 1000;
-        if (u.includes('MB')) return value * 1000 * 1000;
-        if (u.includes('KB')) return value * 1000;
-        return value; // B
-    } else {
-        // 容错：如果是百分比等其他单位，直接返回原值
-        return value;
-    }
-}
-
-// 2. 核心格式化：将 Bytes/s 转换为人类可读的单位 (KB/s, MB/s 等)
-function formatIOBytes(value: number): string {
-    if (value === 0) return '0 B/s';
-    if (value < 1000) return value.toFixed(0) + ' B/s';
-    if (value < 1000 * 1000) return (value / 1000).toFixed(2) + ' KB/s';
-    if (value < 1000 * 1000 * 1000) return (value / (1000 * 1000)).toFixed(2) + ' MB/s';
-    if (value < 1000 * 1000 * 1000 * 1000) return (value / (1000 * 1000 * 1000)).toFixed(2) + ' GB/s';
-    return (value / (1000 * 1000 * 1000 * 1000)).toFixed(2) + ' TB/s';
-}
-
 // 3. Tooltip 格式化
 function formatIOTooltip(value: number): string {
     return formatIOBytes(value);
@@ -103,9 +75,9 @@ const chartStates = reactive<Record<string, { range: number }>>({
 function getFixedAxisOption(title: string, color: string, unit: string, min?: number, max?: number): EChartsOption {
     return {
         backgroundColor: 'transparent',
-        tooltip: { 
-            trigger: 'axis', 
-            backgroundColor: 'rgba(30, 41, 59, 0.9)', 
+        tooltip: {
+            trigger: 'axis',
+            backgroundColor: 'rgba(30, 41, 59, 0.9)',
             textStyle: { color: '#fff' },
             formatter: (params: any) => {
                 const param = params[0];
@@ -116,8 +88,8 @@ function getFixedAxisOption(title: string, color: string, unit: string, min?: nu
         title: { text: title, textStyle: { color: '#94a3b8', fontSize: 14 }, left: 'center' },
         toolbox: { show: true, feature: { saveAsImage: { show: true, title: '保存图片' } } },
         xAxis: { type: 'time', splitLine: { show: false }, axisLabel: { color: '#64748b' } },
-        yAxis: { 
-            type: 'value', 
+        yAxis: {
+            type: 'value',
             min: min, max: max,
             splitLine: { lineStyle: { color: '#334155', type: 'dashed' } },
             axisLabel: { formatter: `{value} ${unit}` }
@@ -138,9 +110,9 @@ function getFixedAxisOption(title: string, color: string, unit: string, min?: nu
 function getIOOption(title: string, color: string): EChartsOption {
     return {
         backgroundColor: 'transparent',
-        tooltip: { 
-            trigger: 'axis', 
-            backgroundColor: 'rgba(30, 41, 59, 0.9)', 
+        tooltip: {
+            trigger: 'axis',
+            backgroundColor: 'rgba(30, 41, 59, 0.9)',
             textStyle: { color: '#fff' },
             formatter: (params: any) => {
                 const param = params[0];
@@ -153,8 +125,8 @@ function getIOOption(title: string, color: string): EChartsOption {
         title: { text: title, textStyle: { color: '#94a3b8', fontSize: 14 }, left: 'center' },
         toolbox: { show: true, feature: { saveAsImage: { show: true, title: '保存图片' } } },
         xAxis: { type: 'time', splitLine: { show: false }, axisLabel: { color: '#64748b' } },
-        yAxis: { 
-            type: 'value', 
+        yAxis: {
+            type: 'value',
             scale: true, // 启用自动缩放
             splitLine: { lineStyle: { color: '#334155', type: 'dashed' } },
             // Y轴标签使用格式化函数
@@ -176,8 +148,8 @@ const chartOptions = reactive<Record<string, EChartsOption>>({
     cpu: getFixedAxisOption('CPU 占用', '#3b82f6', '%', 0, 100),
     cpu_temp: getFixedAxisOption('CPU 温度', '#f59e0b', '°C', 0, 120),
     memory: getFixedAxisOption('内存占用', '#8b5cf6', '%', 0, 100),
-    network_in: getIOOption('网络下行', '#10b981'),
     network_out: getIOOption('网络上行', '#f97316'),
+    network_in: getIOOption('网络下行', '#10b981'),
     storage_io: getIOOption('存储 IO', '#ec4899'),
     storage_usage: getFixedAxisOption('存储占用', '#06b6d4', '%', 0, 100),
 });
@@ -194,7 +166,7 @@ const loadHistoryAndRender = async (key: string) => {
     const range = chartStates[key].range;
     // 从 DB 获取原始数据
     const data = await getHistory(key as any, range);
-    
+
     // 针对图表类型进行归一化
     let seriesData: [number, number][];
 
@@ -258,7 +230,7 @@ watch(() => props.data.dynamic, (newData) => {
     // CPU Temp
     if (newData.cpu) {
         let totalTemp = 0, count = 0;
-        Object.values(newData.cpu).forEach((c: any) => { if(c.temperature.value > 0) { totalTemp += c.temperature.value; count++ } });
+        Object.values(newData.cpu).forEach((c: any) => { if (c.temperature.value > 0) { totalTemp += c.temperature.value; count++ } });
         if (count > 0) {
             const unit = Object.values(newData.cpu)[0].temperature.unit;
             appendDataPoint('cpu_temp', now, totalTemp / count, unit);
@@ -287,7 +259,7 @@ watch(() => props.data.dynamic, (newData) => {
     if (newData.storage) {
         let totalBytes = 0;
         let unit = 'B/S'; // 默认
-        
+
         Object.values(newData.storage).forEach((d: any) => {
             // 分别对读和写进行归一化，然后相加
             // 这样可以兼容 read 是 KB，write 是 MB 的极端情况
@@ -335,18 +307,17 @@ onMounted(async () => {
     <div class="w-full h-full flex flex-col gap-6">
         <div class="flex justify-between items-center bg-slate-800 p-4 rounded-xl border border-slate-700">
             <h2 class="text-xl font-bold text-slate-200">历史数据监控</h2>
-            <button @click="clearAllData" class="text-xs bg-red-900/50 text-red-400 px-3 py-1 rounded hover:bg-red-900 transition">
+            <button @click="clearAllData"
+                class="text-xs bg-red-900/50 text-red-400 px-3 py-1 rounded hover:bg-red-900 transition">
                 清空所有数据
             </button>
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div v-for="(opt, key) in chartOptions" :key="key" class="bg-slate-800 border border-slate-700 rounded-xl p-4 relative group">
-                <select 
-                    v-model="chartStates[key].range" 
-                    @change="handleRangeChange(key)"
-                    class="absolute top-6 right-16 z-10 bg-slate-900 border border-slate-600 text-xs text-slate-300 px-2 py-1 rounded outline-none opacity-0 group-hover:opacity-100 transition-opacity"
-                >
+            <div v-for="(opt, key) in chartOptions" :key="key"
+                class="bg-slate-800 border border-slate-700 rounded-xl p-4 relative group">
+                <select v-model="chartStates[key].range" @change="handleRangeChange(key)"
+                    class="absolute top-6 right-16 z-10 bg-slate-900 border border-slate-600 text-xs text-slate-300 px-2 py-1 rounded outline-none opacity-0 group-hover:opacity-100 transition-opacity">
                     <option v-for="r in timeRanges" :key="r.value" :value="r.value">{{ r.label }}</option>
                 </select>
                 <v-chart :option="opt" :autoresize="true" style="height: 320px;" />
@@ -356,5 +327,8 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-div[ref] { width: 100%; height: 100%; }
+div[ref] {
+    width: 100%;
+    height: 100%;
+}
 </style>
