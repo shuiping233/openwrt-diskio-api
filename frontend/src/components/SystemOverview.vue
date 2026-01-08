@@ -4,22 +4,22 @@ import type { DynamicApiResponse, StaticApiResponse } from '../model';
 
 // 定义组件接收的 props
 interface Props {
-  data: {
-    dynamic: DynamicApiResponse;
-    static: StaticApiResponse;
-  };
+    data: {
+        dynamic: DynamicApiResponse;
+        static: StaticApiResponse;
+    };
 }
 
 const props = defineProps<Props>();
 
 // 定义折叠面板状态
 const uiState = reactive({
-  accordions: {
-    storage: true,
-    cpu: true,
-    network: true,
-    sysinfo: true,
-  }
+    accordions: {
+        storage: true,
+        cpu: true,
+        network: true,
+        sysinfo: true,
+    }
 });
 </script>
 
@@ -51,7 +51,7 @@ const uiState = reactive({
                                 {{ data.dynamic.cpu.total.temperature.value.toFixed(0) }}
                             </span>
                             <span class="text-slate-400 text-sm ml-1">{{ data.dynamic.cpu.total.temperature.unit
-                                }}</span>
+                            }}</span>
                         </div>
                     </div>
                 </div>
@@ -92,25 +92,55 @@ const uiState = reactive({
             </div>
 
             <!-- Network In -->
-            <div v-if="data.dynamic.network?.total?.incoming"
+            <div v-if="data.dynamic.network?.['pppoe-wan']?.incoming || data.dynamic.network?.['pppoe-wan']?.outgoing"
                 class="bg-slate-800 border border-slate-700 rounded-xl p-5">
-                <div class="flex items-center justify-between">
-                    <div class="text-slate-400 text-sm">网络下行</div>
-                    <div class="text-xl font-bold font-mono text-cyan-500">
-                        {{ data.dynamic.network.total.incoming.value.toFixed(2) }}
-                        <span class="text-slate-400 text-sm">{{ data.dynamic.network.total.incoming.unit }}</span>
+                <div class="flex flex-col">
+                    <div class="text-slate-400 text-sm mb-2">网络流量 (pppoe-wan)</div>
+
+                    <!-- 上行 -->
+                    <div v-if="data.dynamic.network?.['pppoe-wan']?.outgoing" class="flex items-center justify-between">
+                        <div class="text-orange-500">↑ 上行</div>
+                        <div class="text-xl font-bold font-mono text-orange-500">
+                            {{ data.dynamic.network['pppoe-wan'].outgoing.value.toFixed(2) }}
+                            <span class="text-slate-400 text-sm">{{ data.dynamic.network['pppoe-wan'].outgoing.unit
+                                }}</span>
+                        </div>
+                    </div>
+
+                    <!-- 下行 -->
+                    <div v-if="data.dynamic.network?.['pppoe-wan']?.incoming"
+                        class="flex items-center justify-between mb-1">
+                        <div class="text-cyan-500">↓ 下行</div>
+                        <div class="text-xl font-bold font-mono text-cyan-500">
+                            {{ data.dynamic.network['pppoe-wan'].incoming.value.toFixed(2) }}
+                            <span class="text-slate-400 text-sm">{{ data.dynamic.network['pppoe-wan'].incoming.unit
+                                }}</span>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Network Out -->
-            <div v-if="data.dynamic.network?.total?.outgoing"
+            <div v-if="data.dynamic.network?.['pppoe-wan']?.incoming || data.dynamic.network?.['pppoe-wan']?.outgoing"
                 class="bg-slate-800 border border-slate-700 rounded-xl p-5">
-                <div class="flex items-center justify-between">
-                    <div class="text-slate-400 text-sm">网络上行</div>
+                <div class="text-slate-400 text-sm mb-2">总网卡流量</div>
+                <!-- 上行 -->
+                <div v-if="data.dynamic.network?.['pppoe-wan']?.outgoing" class="flex items-center justify-between">
+                    <div class="text-orange-500">↑ 上行</div>
                     <div class="text-xl font-bold font-mono text-orange-500">
+                        {{ data.dynamic.network.total.incoming.value.toFixed(2) }}
+                        <span class="text-slate-400 text-sm">{{ data.dynamic.network.total.incoming.unit
+                            }}</span>
+                    </div>
+                </div>
+
+                <!-- 下行 -->
+                <div v-if="data.dynamic.network?.['pppoe-wan']?.incoming"
+                    class="flex items-center justify-between mb-1">
+                    <div class="text-cyan-500">↓ 下行</div>
+                    <div class="text-xl font-bold font-mono text-cyan-500">
                         {{ data.dynamic.network.total.outgoing.value.toFixed(2) }}
-                        <span class="text-slate-400 text-sm">{{ data.dynamic.network.total.outgoing.unit }}</span>
+                        <span class="text-slate-400 text-sm">{{ data.dynamic.network.total.outgoing.unit
+                            }}</span>
                     </div>
                 </div>
             </div>
@@ -159,10 +189,10 @@ const uiState = reactive({
                                 }} {{
                                     dev.used_percent.unit }}</span></div>
                         <div><span class="text-slate-500">总容量:</span> <span class="font-mono">{{
-                                dev.total.value.toFixed(2) }} {{
-                                dev.total.unit }}</span></div>
+                            dev.total.value.toFixed(2) }} {{
+                                    dev.total.unit }}</span></div>
                         <div><span class="text-slate-500">已用:</span> <span class="font-mono">{{
-                                dev.used.value.toFixed(2) }} {{
+                            dev.used.value.toFixed(2) }} {{
                                     dev.used.unit
                                 }}</span></div>
                     </div>
@@ -208,6 +238,23 @@ const uiState = reactive({
                     :class="{ 'rotate-180': uiState.accordions.network }">▼</span>
             </div>
             <div v-show="uiState.accordions.network" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+
+                <!-- total netowrk device io -->
+                <div v-if="data.dynamic.network?.total"
+                    class="bg-slate-800 border border-slate-700 rounded-xl p-5 transition-all hover:-translate-y-0.5 hover:shadow-xl">
+                    <h3 class="text-lg font-bold mb-4">总网卡流量</h3>
+                    <div class="flex justify-between items-center">
+                        <div class="text-xl font-bold font-mono text-cyan-500">↓ {{
+                            data.dynamic.network.total.incoming.value.toFixed(2) }}
+                            {{
+                                data.dynamic.network.total.incoming.unit }} </div>
+                        <div class="text-xl font-bold font-mono text-orange-500">↑ {{
+                            data.dynamic.network.total.outgoing.value.toFixed(2)
+                            }} {{
+                                data.dynamic.network.total.outgoing.unit }} </div>
+                    </div>
+                </div>
+
                 <!-- IO Cards -->
                 <template v-for="(net, iface) in data.dynamic.network" :key="'io-'+iface">
                     <div v-if="iface !== 'total'"
@@ -220,7 +267,7 @@ const uiState = reactive({
                                 {{
                                     net.incoming.unit }} </div>
                             <div class="text-xl font-bold font-mono text-orange-500">↑ {{ net.outgoing.value.toFixed(2)
-                                }} {{
+                            }} {{
                                     net.outgoing.unit }} </div>
                         </div>
                     </div>
