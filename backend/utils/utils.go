@@ -13,11 +13,11 @@ func ConvertBytes(bytes float64, unit string) (float64, string) {
 	unit = TrimBytesUnit(unit)
 
 	unitList := model.RateUnitList
-	if findIndex(model.DataUnitList, unit) != -1 {
+	if FindIndex(model.DataUnitList, unit) != -1 {
 		unitList = model.DataUnitList
 	}
 
-	unitListIndex := findIndex(unitList, unit)
+	unitListIndex := FindIndex(unitList, unit)
 	if unitListIndex < 0 {
 		return bytes, unit
 	}
@@ -37,7 +37,7 @@ func TrimBytesUnit(unit string) string {
 }
 
 // if not found , return -1 , python list index be like
-func findIndex(list []string, expected string) int {
+func FindIndex(list []string, expected string) int {
 	if list == nil {
 		return -1
 	}

@@ -226,6 +226,47 @@ func parseNetworkConnectionLine(line string) (*rawConn, *rawConn) {
 	return &origin, &reply
 }
 
+func ReadPrivateIpv4Addresses(runner CommandRunnerInterface) (cidrs []string) {
+	raw, err := runner.Run("ip", "-o", "addr", "show")
+	if err != nil {
+		return
+	}
+
+	for _, l := range strings.Split(raw, "\n") {
+		fields := strings.Fields(l)
+		if len(fields) < 4 {
+			continue
+		}
+		var ipv4Cidr string
+		// var ipv6Cidr string
+		networkDeviceName := fields[1]
+
+		isPrivateNetworkDevice := false
+		for _, prefix := range model.InternalNetworkDeviceNamePrefixList {
+			if strings.HasPrefix(networkDeviceName, prefix) {
+				isPrivateNetworkDevice = true
+				break
+			}
+		}
+		if !isPrivateNetworkDevice {
+			continue
+		}
+
+		switch fields[2] {
+		case "inet":
+			ipv4Cidr = fields[3]
+		// case "inet6":
+		// ipv6Cidr = fields[3]
+		default:
+			continue
+		}
+		cidrs = append(cidrs, ipv4Cidr)
+
+	}
+	return cidrs
+
+}
+
 // "result" must be not nil
 func readNetworkInterfaceIpAddress(runner CommandRunnerInterface, result model.StaticNetworkMetric) {
 
@@ -604,7 +645,21 @@ func ReadSystemMetric(reader FsReaderInterface) model.SystemMetric {
 	return result
 }
 
-func ReadConnectionMetric(reader FsReaderInterface, metric *model.NetworkConnectionMetric) {
+func selectPrivateAddress(originConnectionAddr string, replyConnectionAddr string, originConnectionPort int, replyConnectionPort int, privateCidr []string) (string, int) {
+	isOriginAddrInSubnets := utils.IsIpInSubnets(originConnectionAddr, privateCidr)
+	isReplyAddrInSubnets := utils.IsIpInSubnets(replyConnectionAddr, privateCidr)
+
+	if !isOriginAddrInSubnets && !isReplyAddrInSubnets {
+		return originConnectionAddr, originConnectionPort
+	}
+
+	if isOriginAddrInSubnets {
+		return originConnectionAddr, originConnectionPort
+	}
+	return replyConnectionAddr, replyConnectionPort
+}
+
+func ReadConnectionMetric(reader FsReaderInterface, metric *model.NetworkConnectionMetric, privateCidr []string) {
 	var lines []string
 
 	for _, path := range procPaths.NetworkConnection() {
@@ -626,41 +681,89 @@ func ReadConnectionMetric(reader FsReaderInterface, metric *model.NetworkConnect
 			continue
 		}
 
-		for _, connection := range []*rawConn{originConnection, replyConnection} {
-
-			switch connection.protocol {
-			case "tcp":
-				metric.Counts.AddCountTcp()
-			case "udp":
-				metric.Counts.AddCountUdp()
-			default:
-				metric.Counts.AddCountOther()
-			}
-
-			traffic, unit := utils.ConvertBytes(
-				utils.TryFloat64(connection.kv["bytes"]),
-				model.Byte,
-			)
-			result = append(
-				result,
-				model.NetworkConnection{
-					IpFamily:        connection.ipFamily,
-					SourceIp:        connection.kv["src"],
-					SourcePort:      utils.TryInt(connection.kv["sport"]),
-					DestinationIp:   connection.kv["dst"],
-					DestinationPort: utils.TryInt(connection.kv["dport"]),
-					Protocol:        connection.protocol,
-					State:           connection.state,
-					Traffic: model.MetricUnit{
-						Value: traffic,
-						Unit:  unit,
-					},
-					Packets: utils.TryInt64(connection.kv["packets"]),
-				},
-			)
+		// always originConnection.protocol == replyConnection.protocol
+		// so count once
+		switch originConnection.protocol {
+		case "tcp":
+			metric.Counts.AddCountTcp()
+		case "udp":
+			metric.Counts.AddCountUdp()
+		default:
+			metric.Counts.AddCountOther()
 		}
+
+		// if orig.src in RFC1918:
+		// 	show (orig.src, orig.sport, orig.dst, orig.dport)   # 内网视角
+		// else:
+		// 	show (reply.dst, reply.dport, reply.src, reply.sport)   # 公网视角
+
+		var sourceIp, destinationIp string
+		var sourcePort, destinationPort int
+		if originConnection.ipFamily == "ipv4" {
+			// ipv4 has NAT
+			sourceIp, sourcePort = selectPrivateAddress(
+				originConnection.kv["src"],
+				replyConnection.kv["src"],
+				utils.TryInt(originConnection.kv["sport"]),
+				utils.TryInt(replyConnection.kv["sport"]),
+				privateCidr,
+			)
+			destinationIp, destinationPort = selectPrivateAddress(
+				originConnection.kv["dst"],
+				replyConnection.kv["dst"],
+				utils.TryInt(originConnection.kv["dport"]),
+				utils.TryInt(replyConnection.kv["dport"]),
+				privateCidr,
+			)
+		} else {
+			// ipv6 has not NAT
+			sourceIp = originConnection.kv["src"]
+			destinationIp = originConnection.kv["dst"]
+			sourcePort = utils.TryInt(originConnection.kv["sport"])
+			destinationPort = utils.TryInt(originConnection.kv["dport"])
+		}
+
+		originTraffic, unit := utils.ConvertBytes(
+			utils.TryFloat64(originConnection.kv["bytes"]),
+			model.Byte,
+		)
+		replyTraffic, unit := utils.ConvertBytes(
+			utils.TryFloat64(replyConnection.kv["bytes"]),
+			model.Byte,
+		)
+
+		traffic := originTraffic
+
+		if replyTraffic > 0 {
+			traffic += replyTraffic
+		}
+
+		originPackets := utils.TryInt64(originConnection.kv["packets"])
+		replyPackets := utils.TryInt64(replyConnection.kv["packets"])
+		packets := originPackets
+
+		if replyPackets > 0 {
+			packets += replyPackets
+		}
+
+		result = append(
+			result,
+			model.NetworkConnection{
+				IpFamily:        originConnection.ipFamily,
+				SourceIp:        sourceIp,
+				SourcePort:      sourcePort,
+				DestinationIp:   destinationIp,
+				DestinationPort: destinationPort,
+				Protocol:        originConnection.protocol,
+				State:           originConnection.state,
+				Traffic: model.MetricUnit{
+					Value: traffic,
+					Unit:  unit,
+				},
+				Packets: packets,
+			},
+		)
 	}
-	metric.Counts.DivideAllCounts()
 	metric.Details = append(metric.Details, result...)
 }
 

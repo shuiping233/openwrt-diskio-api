@@ -23,43 +23,14 @@ const props = defineProps<{
 // 全局搜索词
 const globalFilter = ref('');
 
+
 watch(globalFilter, (newFilter) => {
   table.setGlobalFilter(newFilter);
 });
 
 // ================= 1. 数据聚合逻辑 =================
-const aggregatedData = computed(() => {
-  const list = props.connectionData?.connections || [];
-  if (list.length === 0) return [];
-
-  const groups = new Map<string, any>();
-
-  list.forEach(c => {
-    const endpointA = `${c.source_ip}:${c.source_port}`;
-    const endpointB = `${c.destination_ip}:${c.destination_port}`;
-    const endpoints = [endpointA, endpointB].sort();
-    const key = `${c.protocol}:${endpoints[0]}<->${endpoints[1]}`;
-
-    if (!groups.has(key)) {
-      groups.set(key, {
-        ...c,
-        _sumTraffic: 0,
-        _sumPackets: 0
-      });
-    }
-
-    const item = groups.get(key);
-    if (c.traffic.value < 0) {
-      return Array.from(groups.values());
-    }
-    item._sumTraffic += c.traffic.value;
-    item._sumPackets += c.packets;
-
-    item.traffic.value = item._sumTraffic;
-    item.packets = item._sumPackets;
-  });
-
-  return Array.from(groups.values());
+const displayData = computed(() => {
+  return props.connectionData?.connections || [];
 });
 
 // ================= 2. 辅助函数 =================
@@ -317,7 +288,7 @@ const columns = [
 const initialSorting = [{ id: 'traffic', desc: true }];
 
 const table = useVueTable({
-  data: aggregatedData,
+  data: displayData,
   columns,
   getCoreRowModel: getCoreRowModel(),
   getSortedRowModel: getSortedRowModel(),

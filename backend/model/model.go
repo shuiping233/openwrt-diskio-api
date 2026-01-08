@@ -25,8 +25,9 @@ const (
 )
 
 var (
-	RateUnitList = []string{BSecond, KbSecond, MbSecond, GbSecond, TbSecond, PbSecond}
-	DataUnitList = []string{Byte, KiloByte, MegaByte, GigaByte, TeraByte, PetaByte}
+	RateUnitList                        = []string{BSecond, KbSecond, MbSecond, GbSecond, TbSecond, PbSecond}
+	DataUnitList                        = []string{Byte, KiloByte, MegaByte, GigaByte, TeraByte, PetaByte}
+	InternalNetworkDeviceNamePrefixList = []string{"br-lan", "docker", "tun"}
 )
 
 type NetSnapUnit struct {

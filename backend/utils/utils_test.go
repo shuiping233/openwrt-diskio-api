@@ -69,7 +69,7 @@ func TestFindIndex(t *testing.T) {
 	}
 	for _, cases := range testCases {
 		t.Run(cases.testName, func(t *testing.T) {
-			index := findIndex(cases.input1, cases.input2)
+			index := FindIndex(cases.input1, cases.input2)
 			assert.Equal(t, cases.expected1, index)
 		})
 	}

@@ -89,8 +89,10 @@ func (b *BackgroundService) UpdateNetworkConnectionDetails(
 			continue
 		}
 
+		privateCidr := ReadPrivateIpv4Addresses(b.Runner)
+
 		networkConnectionMetric := &model.NetworkConnectionMetric{}
-		ReadConnectionMetric(b.Reader, networkConnectionMetric)
+		ReadConnectionMetric(b.Reader, networkConnectionMetric, privateCidr)
 
 		b.NetworkConnectionMetric = networkConnectionMetric
 
