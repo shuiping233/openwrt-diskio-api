@@ -108,7 +108,7 @@ function getBaseOption(title: string, color: string): EChartsOption {
             data: [],
             lineStyle: { width: 2, color: color },
             areaStyle: { opacity: 0.1, color: color },
-            smooth: true
+            smooth: false
         }]
     };
 }
