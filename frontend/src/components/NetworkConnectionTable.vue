@@ -31,8 +31,22 @@ watch(globalFilter, (newFilter) => {
 const displayData = computed(() => {
   const list = props.connectionData?.connections || [];
   if (list.length === 0) return [];
-  return list;
   
+  // 使用 Set 来跟踪已见过的连接标识符，防止重复
+  const seen = new Set();
+  return list.filter(connection => {
+    const endpointA = `${connection.source_ip}:${connection.source_port}`;
+    const endpointB = `${connection.destination_ip}:${connection.destination_port}`;
+    // 对端点进行排序以处理双向连接
+    const endpoints = [endpointA, endpointB].sort();
+    const key = `${endpoints[0]}<->${endpoints[1]}-${connection.protocol}`;
+    
+    if (seen.has(key)) {
+      return false; // 过滤掉重复项
+    }
+    seen.add(key);
+    return true;
+  });
 });
 
 // ================= 2. 辅助函数 =================
@@ -295,18 +309,20 @@ const table = useVueTable({
   getCoreRowModel: getCoreRowModel(),
   getSortedRowModel: getSortedRowModel(),
   getFilteredRowModel: getFilteredRowModel(),
-  getRowId: (row) => {
-    // 创建一个标准化的连接标识符，确保无论连接方向如何，相同的连接对都有相同的ID
-    const endpoints = [
-      `${row.source_ip}:${row.source_port}`,
-      `${row.destination_ip}:${row.destination_port}`
-    ].sort(); // 排序确保 A->B 和 B->A 被视为同一连接对
-    
-    // 添加一个索引以确保唯一性，以防后端返回完全相同的条目
+  getRowId: (row, index, parent) => {
+    // 为每个连接创建一个标准化的唯一ID
+    const endpointA = `${row.source_ip}:${row.source_port}`;
+    const endpointB = `${row.destination_ip}:${row.destination_port}`;
+    const endpoints = [endpointA, endpointB].sort(); // 排序确保一致性
     const baseId = `${endpoints[0]}<->${endpoints[1]}-${row.protocol}`;
     
-    // 如果需要绝对唯一性，可以添加一个时间戳或随机数
-    return `${baseId}-${Date.now()}-${Math.random()}`.replace(/\./g, '');
+    // 添加一个稳定的唯一标识符，基于连接信息和原始索引
+    return `${baseId}-${row.traffic.value}-${row.packets}-${index}`;
+  },
+  initialState: {
+    sorting: initialSorting,
+    columnFilters: [],
+    globalFilter: globalFilter.value,
   },
   globalFilterFn: (row, columnId, value) => {
     const search = String(value).toLowerCase();
