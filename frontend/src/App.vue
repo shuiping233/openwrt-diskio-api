@@ -200,7 +200,8 @@ onUnmounted(() => {
     </div>
     <!-- Tab: Analytics -->
     <div v-if="uiState.activeTab === 'analytics'">
-      <Analytics />
+      <!-- 👇 传入 data -->
+      <Analytics :data="data" />
     </div>
 
     <Toaster />
