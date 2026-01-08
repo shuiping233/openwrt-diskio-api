@@ -82,16 +82,30 @@ const chartOptions = reactive<Record<string, EChartsOption>>({
 function getBaseOption(title: string, color: string): EChartsOption {
     return {
         backgroundColor: 'transparent',
-        tooltip: { trigger: 'axis', backgroundColor: 'rgba(30, 41, 59, 0.9)', textStyle: { color: '#fff' } },
+        tooltip: { 
+            trigger: 'axis', 
+            backgroundColor: 'rgba(30, 41, 59, 0.9)', 
+            textStyle: { color: '#fff' },
+            formatter: (params: any) => {
+                const param = params[0];
+                // 使用默认单位 %，实际单位会在数据加载后更新
+                return `${param.seriesName}<br/>${new Date(param.axisValue).toLocaleString()}<br/>${param.value[1]} %`;
+            }
+        },
         grid: { left: 40, right: 20, bottom: 30, top: 60, containLabel: false },
         title: { text: title, textStyle: { color: '#94a3b8', fontSize: 14 }, left: 'center' },
         toolbox: { show: true, feature: { saveAsImage: { show: true, title: '保存图片' } } },
         xAxis: { type: 'time', splitLine: { show: false }, axisLabel: { color: '#64748b' } },
-        yAxis: { type: 'value', splitLine: { lineStyle: { color: '#334155', type: 'dashed' } } },
+        yAxis: { 
+            type: 'value', 
+            splitLine: { lineStyle: { color: '#334155', type: 'dashed' } },
+            axisLabel: { formatter: `{value} %` } // 默认单位
+        },
         series: [{
             type: 'line',
+            name: title, // 添加图表名称
             showSymbol: false,
-            data: [], // 初始空数据
+            data: [],
             lineStyle: { width: 2, color: color },
             areaStyle: { opacity: 0.1, color: color },
             smooth: true
@@ -99,41 +113,52 @@ function getBaseOption(title: string, color: string): EChartsOption {
     };
 }
 
+
 // 从 DB 加载历史数据，并直接赋值给 Option
 const loadHistoryAndRender = async (key: string) => {
     const range = chartStates[key].range;
-    const data = await getHistory(key as any, range);
+    const data = await getHistory(key as 'cpu' | 'cpu_temp' | 'memory' | 'network_in' | 'network_out' | 'storage_io', range);
 
     // ECharts Time Axis 格式: [[t1, v1], [t2, v2]]
-    const seriesData = data.map(item => [item.timestamp, item.value]);
+    const seriesData = data.map(item => [item.timestamp, item.value] as [number, number]);
 
-    // 获取单位
+    // 修复 yAxis 类型
+    const yAxis = chartOptions[key].yAxis as {
+        axisLabel?: {
+            formatter?: string;
+        };
+    };
+
     const unit = data.length > 0 ? data[0].unit : '%';
-
-    // 直接修改 reactive 属性，vue-echarts 自动更新
-    (chartOptions[key].series as any)[0].data = seriesData;
-    (chartOptions[key].yAxis as any).axisLabel = { formatter: `{value} ${unit}` };
+    yAxis.axisLabel = { formatter: `{value} ${unit}` };
 };
 
 // ================= 核心逻辑：流式更新 =================
 
 // 这个函数直接修改 reactive 数组，不会导致图表重置，只会平滑更新
 const appendDataPoint = (key: string, timestamp: number, value: number, unit: string) => {
-    const seriesArr = (chartOptions[key].series as any)[0].data as Array<[number, number]>;
+    const seriesArr = (chartOptions[key].series as { data: [number, number][] })[0].data;
 
-    // 1. 推入新数据
+    // 推入新数据
     seriesArr.push([timestamp, value]);
 
-    // 2. 内存保护：如果点太多，移除旧点，防止浏览器卡顿
-    // 真正的历史数据在 DB 里，图表只展示最近 500 个点足够
+    // 内存保护：如果点太多，移除旧点
     if (seriesArr.length > 500) {
         seriesArr.shift();
     }
 
-    // 3. 异步存入 DB
+    // 更新 Y 轴单位显示
+    const yAxis = chartOptions[key].yAxis as {
+        axisLabel?: {
+            formatter?: string;
+        };
+    };
+    yAxis.axisLabel = { formatter: `{value} ${unit}` };
+
+    // 异步存入 DB
     addHistoryBatch([{
         timestamp,
-        metric: key as any,
+        metric: key as 'cpu' | 'cpu_temp' | 'memory' | 'network_in' | 'network_out' | 'storage_io',
         value,
         unit
     }]).catch(console.error);
@@ -172,7 +197,7 @@ watch(() => props.data.dynamic, (newData) => {
     if (newData.storage) {
         let totalIO = 0, unit = 'KB/s';
         Object.values(newData.storage).forEach((d: any) => {
-            if (d.read.value > 0 && d.write.value > 0){
+            if (d.read.value > 0 && d.write.value > 0) {
                 totalIO += d.read.value + d.write.value;
             }
             unit = d.read.unit;
@@ -239,7 +264,7 @@ onMounted(async () => {
 
                 <!-- vue-echarts 组件 -->
                 <!-- 注意：设置 height 否则可能显示不全 -->
-                <v-chart :option="opt" :autoresize="true" style="height: 320px;" />
+                <v-chart :option="opt" :autoresize="true" style="height: 320px ;" />
             </div>
 
         </div>
