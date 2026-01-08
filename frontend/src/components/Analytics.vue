@@ -14,10 +14,10 @@ import {
 } from 'echarts/components';
 import { LabelLayout, UniversalTransition } from 'echarts/features';
 import type { EChartsOption } from 'echarts';
-import { useDatabase } from '../useDatabase';
-import type { HistoryRecord, DynamicApiResponse, StaticApiResponse, ConnectionApiResponse } from '../model';
+import { useDatabase } from '../useDatabase'; // 注意路径可能要根据实际项目调整
+import type { HistoryRecord, DynamicApiResponse } from '../model'; // 注意路径
 
-// 注册 ECharts 组件 (必须步骤，否则报错)
+// 注册 ECharts 组件
 use([
     CanvasRenderer,
     LineChart,
@@ -31,16 +31,49 @@ use([
 const props = defineProps<{
     data: {
         dynamic: DynamicApiResponse,
-        static: StaticApiResponse,
-        connection: ConnectionApiResponse
+        static: any,
+        connection: any
     };
 }>();
 
 const { addHistoryBatch, getHistory } = useDatabase();
 
+// ================= 常量与辅助函数 =================
+
+// 1. 核心转换：将任意单位转换为 Bytes/s (归一化标准)
+function normalizeToBytes(value: number, unit: string): number {
+    const u = unit.toUpperCase();
+    if (u.includes('B/S') || u.includes('/S') || u === 'B') {
+        // 速率或字节数
+        if (u.includes('PB')) return value * 1000 * 1000 * 1000 * 1000 * 1000;
+        if (u.includes('TB')) return value * 1000 * 1000 * 1000 * 1000;
+        if (u.includes('GB')) return value * 1000 * 1000 * 1000;
+        if (u.includes('MB')) return value * 1000 * 1000;
+        if (u.includes('KB')) return value * 1000;
+        return value; // B
+    } else {
+        // 容错：如果是百分比等其他单位，直接返回原值
+        return value;
+    }
+}
+
+// 2. 核心格式化：将 Bytes/s 转换为人类可读的单位 (KB/s, MB/s 等)
+function formatIOBytes(value: number): string {
+    if (value === 0) return '0 B/s';
+    if (value < 1000) return value.toFixed(0) + ' B/s';
+    if (value < 1000 * 1000) return (value / 1000).toFixed(2) + ' KB/s';
+    if (value < 1000 * 1000 * 1000) return (value / (1000 * 1000)).toFixed(2) + ' MB/s';
+    if (value < 1000 * 1000 * 1000 * 1000) return (value / (1000 * 1000 * 1000)).toFixed(2) + ' GB/s';
+    return (value / (1000 * 1000 * 1000 * 1000)).toFixed(2) + ' TB/s';
+}
+
+// 3. Tooltip 格式化
+function formatIOTooltip(value: number): string {
+    return formatIOBytes(value);
+}
+
 // ================= 状态定义 =================
 
-// 时间范围
 const timeRanges = [
     { label: '1m', value: 60 * 1000 },
     { label: '10m', value: 10 * 60 * 1000 },
@@ -54,7 +87,6 @@ const timeRanges = [
 
 const defaultRange = timeRanges[0].value;
 
-// 1. 每个图表的独立配置 (范围)
 const chartStates = reactive<Record<string, { range: number }>>({
     cpu: { range: defaultRange },
     cpu_temp: { range: defaultRange },
@@ -65,21 +97,10 @@ const chartStates = reactive<Record<string, { range: number }>>({
     storage_usage: { range: defaultRange },
 });
 
-// 2. 图表的 Option (核心)
-// 使用 reactive 对象，vue-echarts 会自动响应变化并渲染
-const chartOptions = reactive<Record<string, EChartsOption>>({
-    cpu: getBaseOption('CPU 占用', '#3b82f6'),
-    cpu_temp: getBaseOption('CPU 温度', '#f59e0b'),
-    memory: getBaseOption('内存占用', '#8b5cf6'),
-    network_in: getBaseOption('网络下行', '#10b981'),
-    network_out: getBaseOption('网络上行', '#f97316'),
-    storage_io: getBaseOption('存储 IO', '#ec4899'),
-    storage_usage: getBaseOption('存储占用', '#06b6d4'),
-});
+// ================= ECharts Option 生成 =================
 
-// ================= 辅助函数 =================
-
-function getBaseOption(title: string, color: string): EChartsOption {
+// 百分比/温度图表 (Y轴固定单位)
+function getFixedAxisOption(title: string, color: string, unit: string, min?: number, max?: number): EChartsOption {
     return {
         backgroundColor: 'transparent',
         tooltip: { 
@@ -88,8 +109,7 @@ function getBaseOption(title: string, color: string): EChartsOption {
             textStyle: { color: '#fff' },
             formatter: (params: any) => {
                 const param = params[0];
-                // 使用默认单位 %，实际单位会在数据加载后更新
-                return `${param.seriesName}<br/>${new Date(param.axisValue).toLocaleString()}<br/>${param.value[1]} %`;
+                return `${param.seriesName}<br/>${new Date(param.value[0]).toLocaleString()}<br/>${param.value[1]} ${unit}`;
             }
         },
         grid: { left: 40, right: 20, bottom: 30, top: 60, containLabel: false },
@@ -98,12 +118,13 @@ function getBaseOption(title: string, color: string): EChartsOption {
         xAxis: { type: 'time', splitLine: { show: false }, axisLabel: { color: '#64748b' } },
         yAxis: { 
             type: 'value', 
+            min: min, max: max,
             splitLine: { lineStyle: { color: '#334155', type: 'dashed' } },
-            axisLabel: { formatter: `{value} %` } // 默认单位
+            axisLabel: { formatter: `{value} ${unit}` }
         },
         series: [{
             type: 'line',
-            name: title, // 添加图表名称
+            name: title,
             showSymbol: false,
             data: [],
             lineStyle: { width: 2, color: color },
@@ -113,71 +134,119 @@ function getBaseOption(title: string, color: string): EChartsOption {
     };
 }
 
-// 过滤超出时间范围的数据点
+// IO 类图表 (Y轴自动归一化显示，这里接收的是 Bytes/s)
+function getIOOption(title: string, color: string): EChartsOption {
+    return {
+        backgroundColor: 'transparent',
+        tooltip: { 
+            trigger: 'axis', 
+            backgroundColor: 'rgba(30, 41, 59, 0.9)', 
+            textStyle: { color: '#fff' },
+            formatter: (params: any) => {
+                const param = params[0];
+                // param.value[1] 是已经归一化后的 Bytes/s
+                const displayValue = formatIOTooltip(param.value[1]);
+                return `${param.seriesName}<br/>${new Date(param.value[0]).toLocaleString()}<br/>${displayValue}`;
+            }
+        },
+        grid: { left: 40, right: 20, bottom: 30, top: 60, containLabel: false },
+        title: { text: title, textStyle: { color: '#94a3b8', fontSize: 14 }, left: 'center' },
+        toolbox: { show: true, feature: { saveAsImage: { show: true, title: '保存图片' } } },
+        xAxis: { type: 'time', splitLine: { show: false }, axisLabel: { color: '#64748b' } },
+        yAxis: { 
+            type: 'value', 
+            scale: true, // 启用自动缩放
+            splitLine: { lineStyle: { color: '#334155', type: 'dashed' } },
+            // Y轴标签使用格式化函数
+            axisLabel: { formatter: (value: number) => formatIOBytes(value) }
+        },
+        series: [{
+            type: 'line',
+            name: title,
+            showSymbol: false,
+            data: [],
+            lineStyle: { width: 2, color: color },
+            areaStyle: { opacity: 0.1, color: color },
+            smooth: false
+        }]
+    };
+}
+
+const chartOptions = reactive<Record<string, EChartsOption>>({
+    cpu: getFixedAxisOption('CPU 占用', '#3b82f6', '%', 0, 100),
+    cpu_temp: getFixedAxisOption('CPU 温度', '#f59e0b', '°C', 0, 120),
+    memory: getFixedAxisOption('内存占用', '#8b5cf6', '%', 0, 100),
+    network_in: getIOOption('网络下行', '#10b981'),
+    network_out: getIOOption('网络上行', '#f97316'),
+    storage_io: getIOOption('存储 IO', '#ec4899'),
+    storage_usage: getFixedAxisOption('存储占用', '#06b6d4', '%', 0, 100),
+});
+
+// ================= 数据加载与处理 =================
+
 function filterDataByTimeRange(data: [number, number][], range: number): [number, number][] {
     const now = Date.now();
     const cutoffTime = now - range;
     return data.filter(([timestamp]) => timestamp >= cutoffTime);
 }
 
-// 从 DB 加载历史数据，并直接赋值给 Option
 const loadHistoryAndRender = async (key: string) => {
     const range = chartStates[key].range;
-    const data = await getHistory(key as 'cpu' | 'cpu_temp' | 'memory' | 'network_in' | 'network_out' | 'storage_io', range);
-
-    // ECharts Time Axis 格式: [[t1, v1], [t2, v2]]
-    const seriesData = data.map(item => [item.timestamp, item.value] as [number, number]);
-
-    // 更新图表数据
-    (chartOptions[key].series as any)[0].data = seriesData;
-
-    // 更新 Y 轴单位显示
-    const yAxis = chartOptions[key].yAxis as any;
-    const unit = data.length > 0 ? data[0].unit : '%';
-    yAxis.axisLabel = { formatter: `{value} ${unit}` };
+    // 从 DB 获取原始数据
+    const data = await getHistory(key as any, range);
     
-    // 更新 tooltip 单位
-    const tooltip = chartOptions[key].tooltip as any;
-    tooltip.formatter = (params: any) => {
-        const param = params[0];
-        return `${param.seriesName}<br/>${new Date(param.axisValue).toLocaleString()}<br/>${param.value[1]} ${unit}`;
-    };
+    // 针对图表类型进行归一化
+    let seriesData: [number, number][];
+
+    // 判断是否为 IO 类型图表
+    const isIO = ['network_in', 'network_out', 'storage_io'].includes(key);
+
+    if (isIO) {
+        // IO 图表：假设 DB 里存的可能是任意单位，再次进行归一化 (Bytes/s)
+        seriesData = data.map(item => {
+            // item.unit 是当时存入的单位
+            const normalizedValue = normalizeToBytes(item.value, item.unit);
+            return [item.timestamp, normalizedValue] as [number, number];
+        });
+    } else {
+        // 百分比/温度图表：直接用原始值
+        seriesData = data.map(item => [item.timestamp, item.value] as [number, number]);
+    }
+
+    (chartOptions[key].series as any)[0].data = seriesData;
 };
 
-// ================= 核心逻辑：流式更新 =================
+// ================= 数据追加 =================
 
-// 这个函数直接修改 reactive 数组，不会导致图表重置，只会平滑更新
 const appendDataPoint = (key: string, timestamp: number, value: number, unit: string) => {
     const seriesArr = (chartOptions[key].series as { data: [number, number][] })[0].data;
 
-    // 推入新数据
-    seriesArr.push([timestamp, value]);
+    // 1. 归一化处理：如果是 IO 图表，转为 Bytes/s
+    let finalValue = value;
+    const isIO = ['network_in', 'network_out', 'storage_io'].includes(key);
+    if (isIO) {
+        finalValue = normalizeToBytes(value, unit);
+        // 强制覆盖 unit，确保后续 DB 存入一致
+        unit = 'B/S';
+    }
 
-    // 根据时间范围过滤数据，移除超出范围的数据点
-    const filteredData = filterDataByTimeRange(seriesArr, chartStates[key].range);
-    (chartOptions[key].series as any)[0].data = filteredData;
+    seriesArr.push([timestamp, finalValue]);
 
-    // 更新 Y 轴单位显示
-    const yAxis = chartOptions[key].yAxis as any;
-    yAxis.axisLabel = { formatter: `{value} ${unit}` };
-    
-    // 更新 tooltip 单位
-    const tooltip = chartOptions[key].tooltip as any;
-    tooltip.formatter = (params: any) => {
-        const param = params[0];
-        return `${param.seriesName}<br/>${new Date(param.axisValue).toLocaleString()}<br/>${param.value[1]} ${unit}`;
-    };
+    if (seriesArr.length > 500) {
+        seriesArr.shift();
+    }
 
-    // 异步存入 DB
+    // 存入 DB
     addHistoryBatch([{
         timestamp,
-        metric: key as 'cpu' | 'cpu_temp' | 'memory' | 'network_in' | 'network_out' | 'storage_io',
-        value,
-        unit
+        metric: key as any,
+        value: finalValue, // 注意：这里存的是归一化后的值
+        unit: unit
     }]).catch(console.error);
 };
 
-// 监听 App.vue 传来的数据流
+// ================= 监听数据流 =================
+
 watch(() => props.data.dynamic, (newData) => {
     if (!newData) return;
     const now = Date.now();
@@ -189,7 +258,7 @@ watch(() => props.data.dynamic, (newData) => {
     // CPU Temp
     if (newData.cpu) {
         let totalTemp = 0, count = 0;
-        Object.values(newData.cpu).forEach((c: any) => { if (c.temperature.value > 0) { totalTemp += c.temperature.value; count++ } });
+        Object.values(newData.cpu).forEach((c: any) => { if(c.temperature.value > 0) { totalTemp += c.temperature.value; count++ } });
         if (count > 0) {
             const unit = Object.values(newData.cpu)[0].temperature.unit;
             appendDataPoint('cpu_temp', now, totalTemp / count, unit);
@@ -200,22 +269,36 @@ watch(() => props.data.dynamic, (newData) => {
     const memUsage = newData.memory?.used_percent;
     if (memUsage?.value !== undefined) appendDataPoint('memory', now, memUsage.value, memUsage.unit);
 
-    // Network
+    // Network In
+    // 修改：这里假设接口里是具体的网卡，根据你的代码是 pppoe-wan
     const netIn = newData.network?.['pppoe-wan']?.incoming;
+    if (netIn?.value !== undefined) {
+        // 这里 appendDataPoint 内部会自动处理归一化
+        appendDataPoint('network_in', now, netIn.value, netIn.unit);
+    }
+
+    // Network Out
     const netOut = newData.network?.['pppoe-wan']?.outgoing;
-    if (netIn?.value !== undefined) appendDataPoint('network_in', now, netIn.value, netIn.unit);
-    if (netOut?.value !== undefined) appendDataPoint('network_out', now, netOut.value, netOut.unit);
+    if (netOut?.value !== undefined) {
+        appendDataPoint('network_out', now, netOut.value, netOut.unit);
+    }
 
     // Storage IO
     if (newData.storage) {
-        let totalIO = 0, unit = 'KB/s';
+        let totalBytes = 0;
+        let unit = 'B/S'; // 默认
+        
         Object.values(newData.storage).forEach((d: any) => {
-            if (d.read.value > 0 && d.write.value > 0) {
-                totalIO += d.read.value + d.write.value;
-            }
-            unit = d.read.unit;
+            // 分别对读和写进行归一化，然后相加
+            // 这样可以兼容 read 是 KB，write 是 MB 的极端情况
+            const readBytes = normalizeToBytes(d.read.value, d.read.unit);
+            const writeBytes = normalizeToBytes(d.write.value, d.write.unit);
+            totalBytes += readBytes + writeBytes;
         });
-        appendDataPoint('storage_io', now, totalIO, unit);
+
+        if (totalBytes > 0) {
+            appendDataPoint('storage_io', now, totalBytes, 'B/S');
+        }
     }
 
     // Storage Usage
@@ -226,64 +309,52 @@ watch(() => props.data.dynamic, (newData) => {
     }
 }, { deep: true });
 
-// 切换时间范围
+// ================= UI 交互 =================
+
 const handleRangeChange = (key: string) => {
     loadHistoryAndRender(key);
 };
 
-// 清空
 const clearAllData = async () => {
     if (confirm('确定清空所有历史数据吗？')) {
         const { clearHistory } = useDatabase();
         await clearHistory();
-        // 重置图表数据
         Object.keys(chartOptions).forEach(k => {
             (chartOptions[k].series as any)[0].data = [];
         });
     }
 };
 
-// ================= 生命周期 =================
-
 onMounted(async () => {
     await nextTick();
-    // 初始化加载数据
     Object.keys(chartOptions).forEach(k => loadHistoryAndRender(k));
 });
 </script>
 
 <template>
     <div class="w-full h-full flex flex-col gap-6">
-        <!-- 头部 -->
         <div class="flex justify-between items-center bg-slate-800 p-4 rounded-xl border border-slate-700">
             <h2 class="text-xl font-bold text-slate-200">历史数据监控</h2>
-            <button @click="clearAllData"
-                class="text-xs bg-red-900/50 text-red-400 px-3 py-1 rounded hover:bg-red-900 transition">
+            <button @click="clearAllData" class="text-xs bg-red-900/50 text-red-400 px-3 py-1 rounded hover:bg-red-900 transition">
                 清空所有数据
             </button>
         </div>
 
-        <!-- 图表网格 -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
-            <!-- 循环生成图表 -->
-            <div v-for="(opt, key) in chartOptions" :key="key"
-                class="bg-slate-800 border border-slate-700 rounded-xl p-4 relative group">
-                <!-- 时间选择器 -->
-                <select v-model="chartStates[key].range" @change="handleRangeChange(key)"
-                    class="absolute top-6 right-16 z-10 bg-slate-900 border border-slate-600 text-xs text-slate-300 px-2 py-1 rounded outline-none opacity-0 group-hover:opacity-100 transition-opacity">
+            <div v-for="(opt, key) in chartOptions" :key="key" class="bg-slate-800 border border-slate-700 rounded-xl p-4 relative group">
+                <select 
+                    v-model="chartStates[key].range" 
+                    @change="handleRangeChange(key)"
+                    class="absolute top-6 right-16 z-10 bg-slate-900 border border-slate-600 text-xs text-slate-300 px-2 py-1 rounded outline-none opacity-0 group-hover:opacity-100 transition-opacity"
+                >
                     <option v-for="r in timeRanges" :key="r.value" :value="r.value">{{ r.label }}</option>
                 </select>
-
-                <!-- vue-echarts 组件 -->
-                <!-- 注意：设置 height 否则可能显示不全 -->
                 <v-chart :option="opt" :autoresize="true" style="height: 320px;" />
             </div>
-
         </div>
     </div>
 </template>
 
 <style scoped>
-/* 可选：增加一些过渡动画 */
+div[ref] { width: 100%; height: 100%; }
 </style>
