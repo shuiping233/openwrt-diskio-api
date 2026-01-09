@@ -13,8 +13,8 @@ import {
   ToolboxComponent
 } from 'echarts/components';
 import type { EChartsOption } from 'echarts';
-import { useDatabase } from '../useDatabase'; // 注意路径可能要根据实际项目调整
-import type { HistoryRecord, DynamicApiResponse, StorageData } from '../model'; // 注意路径
+import { useDatabase } from '../useDatabase';
+import type { HistoryRecord, DynamicApiResponse, StorageData } from '../model';
 import { normalizeToBytes, formatIOBytes, formatBytes } from '../utils/convert';
 
 // 注册 ECharts 组件
@@ -59,14 +59,17 @@ const timeRanges = [
 
 const defaultRange = timeRanges[0].value;
 
+// 新增全局时间范围控制
+const globalTimeRange = ref(defaultRange);
+
 const chartStates = reactive<Record<string, { range: number }>>({
-  cpu: { range: defaultRange },
-  cpu_temp: { range: defaultRange },
-  memory: { range: defaultRange },
-  network_in: { range: defaultRange },
-  network_out: { range: defaultRange },
-  storage_io: { range: defaultRange },
-  storage_usage: { range: defaultRange },
+  cpu: { range: globalTimeRange.value },
+  cpu_temp: { range: globalTimeRange.value },
+  memory: { range: globalTimeRange.value },
+  network_in: { range: globalTimeRange.value },
+  network_out: { range: globalTimeRange.value },
+  storage_io: { range: globalTimeRange.value },
+  storage_usage: { range: globalTimeRange.value },
 });
 
 // ================= ECharts Option 生成 =================
@@ -286,6 +289,17 @@ const handleRangeChange = (key: string) => {
   loadHistoryAndRender(key);
 };
 
+// 全局时间范围变化处理
+const handleGlobalRangeChange = () => {
+  // 更新所有图表的时间范围
+  Object.keys(chartStates).forEach(key => {
+    chartStates[key].range = globalTimeRange.value;
+  });
+
+  // 重新加载所有图表的数据
+  Object.keys(chartOptions).forEach(key => loadHistoryAndRender(key));
+};
+
 onMounted(async () => {
   await nextTick();
   Object.keys(chartOptions).forEach(k => loadHistoryAndRender(k));
@@ -294,6 +308,23 @@ onMounted(async () => {
 
 <template>
   <div class="w-full h-full flex flex-col gap-6">
+    <div class="py-2.5 border-b border-slate-700 mb-5 flex justify-between items-center">
+      <div class="flex items-center gap-4">
+        <h3 class="text-lg font-semibold text-slate-200">监控图表</h3>
+      </div>
+
+      <!-- 全局时间范围下拉列表 -->
+      <div class="flex items-center gap-2">
+        <div class="text-slate-400 text-sm text-right ">全局图表时间范围 :</div>
+        <div class="relative">
+          <select v-model="globalTimeRange" @change="handleGlobalRangeChange"
+            class="bg-slate-900 border border-slate-600 text-white text-xs px-2 py-1 rounded outline-none focus:border-blue-500">
+            <option v-for="r in timeRanges" :key="r.value" :value="r.value">{{ r.label }}</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <div v-for="(opt, key) in chartOptions" :key="key"
         class="bg-slate-800 border border-slate-700 rounded-xl p-4 relative group">

@@ -53,7 +53,7 @@ const getStatusColor = (status: string): string => {
   }
 };
 
-// ================= 新增：数据存储逻辑 =================
+// ================= 数据存储逻辑 =================
 
 const { addHistoryBatch } = useDatabase();
 
