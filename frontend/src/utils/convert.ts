@@ -53,6 +53,9 @@ export function normalizeToBytes(value: number, unit: string): number {
 
 // 3. 格式化 ← Bytes/s（递归版，固定输出 RateUnit）
 export function formatIOBytes(bytes: number, idx = 0): string {
+  if (bytes === 0){
+    return `0 ${RATE_UNITS[0]}`;
+  }
   if (idx >= RATE_UNITS.length - 1) {
     // 已最大单位
     return `${(bytes / Math.pow(1000, idx)).toFixed(2)} ${RATE_UNITS[idx]}`;
