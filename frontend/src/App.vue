@@ -7,7 +7,7 @@ import type {
 import SettingsModal from './components/SettingsModal.vue';
 import NetworkConnectionTable from './components/NetworkConnectionTable.vue';
 import SystemOverview from './components/SystemOverview.vue';
-import Analytics from './components/Analytics.vue';
+import MonitoringCharts from './components/Analytics.vue';
 import { useToast } from './useToast';
 import Toaster from './components/Toaster.vue';
 import { useDatabase } from './useDatabase'; // 新增导入
@@ -23,8 +23,16 @@ const data = reactive({
 
 const showSettings = ref(false);
 
+enum Tab {
+  System = 'system',
+  Network = 'network',
+  MonitoringCharts = 'monitoringCharts'
+}
+
+
+
 const uiState = reactive({
-  activeTab: 'system' as 'system' | 'network' | 'analytics',
+  activeTab: Tab.System as Tab,
   refreshInterval: 2000,
   lastUpdated: '--',
   isLoading: false,
@@ -290,32 +298,32 @@ onUnmounted(() => {
 
     <!-- Tabs -->
     <nav class="flex gap-2 mb-5">
-      <button @click="uiState.activeTab = 'system'"
+      <button @click="uiState.activeTab = Tab.System"
         class="px-5 py-2 text-sm font-semibold cursor-pointer border border-slate-700 rounded-lg transition-colors"
         :class="[
-          uiState.activeTab === 'system'
+          uiState.activeTab === Tab.System
             ? 'text-white border-b-2 border-blue-500 bg-transparent'
             : 'text-slate-400 bg-slate-800/50 hover:bg-slate-800'
         ]">
         系统概览
       </button>
-      <button @click="uiState.activeTab = 'network'"
+      <button @click="uiState.activeTab = Tab.Network"
         class="px-5 py-2 text-sm font-semibold cursor-pointer border border-slate-700 rounded-lg transition-colors"
         :class="[
-          uiState.activeTab === 'network'
+          uiState.activeTab === Tab.Network
             ? 'text-white border-b-2 border-blue-500 bg-transparent'
             : 'text-slate-400 bg-slate-800/50 hover:bg-slate-800'
         ]">
         网络连接
       </button>
-      <button @click="uiState.activeTab = 'analytics'"
+      <button @click="uiState.activeTab = Tab.MonitoringCharts"
         class="px-5 py-2 text-sm font-semibold cursor-pointer border border-slate-700 rounded-lg transition-colors"
         :class="[
-          uiState.activeTab === 'analytics'
+          uiState.activeTab === Tab.MonitoringCharts
             ? 'text-white border-b-2 border-blue-500 bg-transparent'
             : 'text-slate-400 bg-slate-800/50 hover:bg-slate-800'
         ]">
-        历史数据分析
+        监控图表
       </button>
     </nav>
 
@@ -325,14 +333,14 @@ onUnmounted(() => {
     </div>
 
     <!-- Tab: Network Connections -->
-    <div v-if="uiState.activeTab === 'network'" class="p-0"> <!-- p-0 可以根据需要调整 -->
+    <div v-if="uiState.activeTab === Tab.Network" class="p-0"> <!-- p-0 可以根据需要调整 -->
       <!-- 👇 使用组件，传入连接数据 -->
       <NetworkConnectionTable :connection-data="data.connection" />
     </div>
     <!-- Tab: Analytics -->
-    <div v-if="uiState.activeTab === 'analytics'">
+    <div v-if="uiState.activeTab === Tab.MonitoringCharts">
       <!-- 👇 传入 data -->
-      <Analytics :data="data" />
+      <MonitoringCharts :data="data" />
     </div>
 
     <SettingsModal v-model:isOpen="showSettings" />
