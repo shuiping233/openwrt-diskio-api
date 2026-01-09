@@ -4,6 +4,7 @@ import dayjs from 'dayjs';
 import type {
   DynamicApiResponse, StaticApiResponse, ConnectionApiResponse
 } from './model';
+import SettingsModal from './components/SettingsModal.vue';
 import NetworkConnectionTable from './components/NetworkConnectionTable.vue';
 import SystemOverview from './components/SystemOverview.vue';
 import Analytics from './components/Analytics.vue';
@@ -19,6 +20,8 @@ const data = reactive({
   static: {} as StaticApiResponse,
   connection: {} as ConnectionApiResponse
 });
+
+const showSettings = ref(false);
 
 const uiState = reactive({
   activeTab: 'system' as 'system' | 'network' | 'analytics',
@@ -131,7 +134,6 @@ onUnmounted(() => {
       </div>
 
       <div class="flex items-center gap-2 text-sm text-slate-400">
-
         <!-- Status Dot -->
         <div
           :style="{ width: '8px', height: '8px', borderRadius: '50%', background: getStatusColor(uiState.status), boxShadow: `0 0 8px ${getStatusColor(uiState.status)}` }">
@@ -153,6 +155,14 @@ onUnmounted(() => {
           <option :value="10000">10s</option>
           <option :value="30000">30s</option>
         </select>
+
+        <!-- 👇 新增：设置齿轮按钮 -->
+        <button @click="showSettings = true" class="text-slate-400 hover:text-white transition-colors" title="设置">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 4.085 1.584a1.724 1.724 0 001.145 2.163c1.543.94 3.31.826 4.085 1.584a1.724 1.724 0 002.573 1.066c1.543-.94 3.31-.826 4.085-1.584a1.724 1.724 0 001.145-2.163c1.543-.94 3.31-.826 4.085-1.584a1.724 1.724 0 002.573-1.066c-1.543.94-3.31.826-4.085-1.584a1.724 1.724 0 00-1.145-2.163c1.543-.94 3.31-.826 4.085-1.584a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31.826-4.085 1.584a1.724 1.724 0 00-1.145 2.163c1.543.94 3.31.826 4.085 1.584a1.724 1.724 0 002.573 1.066c1.543-.94 3.31-.826 4.085-1.584a1.724 1.724 0 001.145-2.163c-1.543-.94-3.31-.826-4.085 1.584a1.724 1.724 0 00-2.573-1.066zM15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 1.414L8.586 10H7a2 2 0 01-2-2V5a2 2 0 012-2z" />
+          </svg>
+        </button>
 
       </div>
     </header>
@@ -204,6 +214,8 @@ onUnmounted(() => {
       <Analytics :data="data" />
     </div>
 
+    <SettingsModal v-model:isOpen="showSettings" />
+    
     <Toaster />
   </div>
 
