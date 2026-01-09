@@ -7,7 +7,7 @@ import type {
 import SettingsModal from './components/SettingsModal.vue';
 import NetworkConnectionTable from './components/NetworkConnectionTable.vue';
 import SystemOverview from './components/SystemOverview.vue';
-import MonitoringCharts from './components/Analytics.vue';
+import MonitoringCharts from './components/MonitoringCharts.vue';
 import { useToast } from './useToast';
 import Toaster from './components/Toaster.vue';
 import { useDatabase } from './useDatabase'; // 新增导入
