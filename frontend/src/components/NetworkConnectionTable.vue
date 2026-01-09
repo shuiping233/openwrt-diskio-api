@@ -363,7 +363,7 @@ const table = useVueTable({
       </div>
     </div>
 
-    <!-- Table Header & Search (移除折叠功能) -->
+    <!-- Table Header & Search -->
     <div class="py-2.5 border-b border-slate-700 mb-5 flex justify-between items-center">
       <div class="flex items-center gap-4">
         <h3 class="text-lg font-semibold text-slate-200">连接列表</h3>
