@@ -36,7 +36,7 @@ const props = defineProps<{
     };
 }>();
 
-const { addHistoryBatch, getHistory } = useDatabase();
+const { getHistory } = useDatabase();
 
 // ================= 常量与辅助函数 =================
 // 3. Tooltip 格式化
@@ -211,14 +211,6 @@ const appendDataPoint = (key: string, timestamp: number, value: number, unit: st
 
     const filteredData = filterDataByTimeRange(seriesArr, chartStates[key].range);
     (chartOptions[key].series as any)[0].data = filteredData;
-
-    // 存入 DB
-    addHistoryBatch([{
-        timestamp,
-        metric: key as any,
-        value: finalValue, // 注意：这里存的是归一化后的值
-        unit: unit
-    }]).catch(console.error);
 };
 
 // ================= 监听数据流 =================
