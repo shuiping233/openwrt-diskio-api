@@ -58,14 +58,18 @@ const formatIP = (ip: string | undefined, family: string | undefined): string =>
   return ip;
 };
 
-
-
-
-// 复制功能
 // 复制功能
 const copyInfo = (row: any) => {
-  const text = `[${row.ip_family}] ${row.protocol} ${row.source_ip}:${row.source_port} -> ${row.destination_ip}:${row.destination_port} | 状态: ${row.state} | 流量: ${row.traffic.value.toFixed(2)} ${row.traffic.unit} (${row.packets} Pkgs)`;
-  
+  let source_ip  : string = row.source_ip
+  let destination_ip  : string = row.destination_ip
+
+  if (row.ip_family?.toUpperCase() === 'IPV6') {
+    source_ip = `[${compressIPv6(row.source_ip)}]`;
+    destination_ip = `[${compressIPv6(row.destination_ip)}]`;
+  }
+
+  const text = `[${row.ip_family}] ${row.protocol} ${source_ip}:${row.source_port} -> ${destination_ip}:${row.destination_port} | 状态: ${row.state || '-'} | 流量: ${row.traffic.value.toFixed(2)} ${row.traffic.unit} (${row.packets} Pkgs)`;
+
   // 检查浏览器是否支持 Clipboard API
   if (navigator.clipboard && window.isSecureContext) {
     // 现代浏览器的安全上下文
