@@ -14,7 +14,7 @@ import {
 } from 'echarts/components';
 import type { EChartsOption } from 'echarts';
 import { useDatabase } from '../useDatabase'; // 注意路径可能要根据实际项目调整
-import type { HistoryRecord, DynamicApiResponse } from '../model'; // 注意路径
+import type { HistoryRecord, DynamicApiResponse ,StorageData} from '../model'; // 注意路径
 import { normalizeToBytes, formatIOBytes, formatBytes } from '../utils/convert';
 
 // 注册 ECharts 组件
@@ -151,7 +151,6 @@ const chartOptions = reactive<Record<string, EChartsOption>>({
     memory: getFixedAxisOption('内存占用', '#8b5cf6', '%', 0, 100),
     network_out: getIOOption('网络上行', '#f97316'),
     network_in: getIOOption('网络下行', '#10b981'),
-
     storage_io: getIOOption('存储 IO', '#ec4899'),
     storage_usage: getFixedAxisOption('存储占用', '#06b6d4', '%', 0, 100),
 });
@@ -265,7 +264,7 @@ watch(() => props.data.dynamic, (newData) => {
         let totalBytes = 0;
         let unit = 'B/S'; // 默认
 
-        Object.values(newData.storage).forEach((d: any) => {
+        Object.values(newData.storage).forEach((d: StorageData) => {
             // 分别对读和写进行归一化，然后相加
             // 这样可以兼容 read 是 KB，write 是 MB 的极端情况
             const readBytes = normalizeToBytes(d.read.value, d.read.unit);
@@ -277,10 +276,8 @@ watch(() => props.data.dynamic, (newData) => {
                 totalBytes += writeBytes;
             }
         });
-
-        if (totalBytes >= 0) {
-            appendDataPoint('storage_io', now, totalBytes, 'B/S');
-        }
+        appendDataPoint('storage_io', now, totalBytes, unit);
+        
     }
 
     // Storage Usage
