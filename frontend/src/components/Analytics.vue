@@ -294,16 +294,6 @@ const handleRangeChange = (key: string) => {
     loadHistoryAndRender(key);
 };
 
-const clearAllData = async () => {
-    if (confirm('确定清空所有历史数据吗？')) {
-        const { clearHistory } = useDatabase();
-        await clearHistory();
-        Object.keys(chartOptions).forEach(k => {
-            (chartOptions[k].series as any)[0].data = [];
-        });
-    }
-};
-
 onMounted(async () => {
     await nextTick();
     Object.keys(chartOptions).forEach(k => loadHistoryAndRender(k));
@@ -312,14 +302,6 @@ onMounted(async () => {
 
 <template>
     <div class="w-full h-full flex flex-col gap-6">
-        <div class="flex justify-between items-center bg-slate-800 p-4 rounded-xl border border-slate-700">
-            <h2 class="text-xl font-bold text-slate-200">历史数据监控</h2>
-            <button @click="clearAllData"
-                class="text-xs bg-red-900/50 text-red-400 px-3 py-1 rounded hover:bg-red-900 transition">
-                清空所有数据
-            </button>
-        </div>
-
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div v-for="(opt, key) in chartOptions" :key="key"
                 class="bg-slate-800 border border-slate-700 rounded-xl p-4 relative group">
