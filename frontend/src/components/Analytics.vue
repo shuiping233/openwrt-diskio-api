@@ -14,7 +14,7 @@ import {
 } from 'echarts/components';
 import type { EChartsOption } from 'echarts';
 import { useDatabase } from '../useDatabase'; // 注意路径可能要根据实际项目调整
-import type { HistoryRecord, DynamicApiResponse ,StorageData} from '../model'; // 注意路径
+import type { HistoryRecord, DynamicApiResponse, StorageData } from '../model'; // 注意路径
 import { normalizeToBytes, formatIOBytes, formatBytes } from '../utils/convert';
 
 // 注册 ECharts 组件
@@ -81,7 +81,7 @@ function getFixedAxisOption(title: string, color: string, unit: string, min?: nu
             textStyle: { color: '#fff' },
             formatter: (params: any) => {
                 const param = params[0];
-                
+
                 return `${param.seriesName}<br/>${new Date(param.value[0]).toLocaleString()}<br/>${formatBytes(param.value[1], unit)} ${unit}`;
             }
         },
@@ -277,7 +277,7 @@ watch(() => props.data.dynamic, (newData) => {
             }
         });
         appendDataPoint('storage_io', now, totalBytes, unit);
-        
+
     }
 
     // Storage Usage
