@@ -269,10 +269,15 @@ watch(() => props.data.dynamic, (newData) => {
             // 这样可以兼容 read 是 KB，write 是 MB 的极端情况
             const readBytes = normalizeToBytes(d.read.value, d.read.unit);
             const writeBytes = normalizeToBytes(d.write.value, d.write.unit);
-            totalBytes += readBytes + writeBytes;
+            if (readBytes > 0) {
+                totalBytes += readBytes;
+            }
+            if (writeBytes > 0) {
+                totalBytes += writeBytes;
+            }
         });
 
-        if (totalBytes > 0) {
+        if (totalBytes >= 0) {
             appendDataPoint('storage_io', now, totalBytes, 'B/S');
         }
     }
