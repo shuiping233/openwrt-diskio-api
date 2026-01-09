@@ -150,6 +150,7 @@ const chartOptions = reactive<Record<string, EChartsOption>>({
     memory: getFixedAxisOption('内存占用', '#8b5cf6', '%', 0, 100),
     network_out: getIOOption('网络上行', '#f97316'),
     network_in: getIOOption('网络下行', '#10b981'),
+
     storage_io: getIOOption('存储 IO', '#ec4899'),
     storage_usage: getFixedAxisOption('存储占用', '#06b6d4', '%', 0, 100),
 });
@@ -207,6 +208,9 @@ const appendDataPoint = (key: string, timestamp: number, value: number, unit: st
     if (seriesArr.length > 500) {
         seriesArr.shift();
     }
+
+    const filteredData = filterDataByTimeRange(seriesArr, chartStates[key].range);
+    (chartOptions[key].series as any)[0].data = filteredData;
 
     // 存入 DB
     addHistoryBatch([{
