@@ -156,7 +156,7 @@ onUnmounted(() => {
           <option :value="30000">30s</option>
         </select>
 
-        <!-- 👇 新增：设置齿轮按钮 -->
+        <!-- 设置齿轮按钮 -->
         <button @click="showSettings = true" class="text-slate-400 hover:text-white transition-colors" title="设置">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-gear"
             viewBox="0 0 16 16">
