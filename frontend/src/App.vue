@@ -10,8 +10,8 @@ import SystemOverview from './components/SystemOverview.vue';
 import Analytics from './components/Analytics.vue';
 import { useToast } from './useToast';
 import Toaster from './components/Toaster.vue';
-
-
+import { useDatabase } from './useDatabase'; // 新增导入
+import { normalizeToBytes } from './utils/convert'; // 新增导入
 
 // ================= 2. 状态定义 =================
 
@@ -39,7 +39,6 @@ const formatTime = (): string => {
   return dayjs().format('YYYY-MM-DD HH:mm:ss')
 };
 
-
 // 状态颜色映射
 const getStatusColor = (status: string): string => {
   switch (status) {
@@ -51,6 +50,122 @@ const getStatusColor = (status: string): string => {
       return '#ef4444'; // 红色
     default:
       return '#94a3b8'; // 灰色
+  }
+};
+
+// ================= 新增：数据存储逻辑 =================
+
+const { addHistoryBatch } = useDatabase();
+
+/**
+ * 将动态数据保存到数据库
+ */
+const saveDynamicDataToDB = (dynamicData: DynamicApiResponse) => {
+  if (!dynamicData) return;
+
+  const now = Date.now();
+  const records = [];
+
+  // CPU 使用率
+  const cpuUsage = dynamicData.cpu?.total?.usage;
+  if (cpuUsage?.value !== undefined) {
+    records.push({
+      timestamp: now,
+      metric: 'cpu' as const,
+      value: cpuUsage.value,
+      unit: cpuUsage.unit
+    });
+  }
+
+  // CPU 温度
+  if (dynamicData.cpu) {
+    let totalTemp = 0, count = 0;
+    Object.values(dynamicData.cpu).forEach((c: any) => {
+      if (c.temperature.value > 0) {
+        totalTemp += c.temperature.value;
+        count++;
+      }
+    });
+    if (count > 0) {
+      const unit = Object.values(dynamicData.cpu)[0].temperature.unit;
+      records.push({
+        timestamp: now,
+        metric: 'cpu_temp' as const,
+        value: totalTemp / count,
+        unit: unit
+      });
+    }
+  }
+
+  // 内存使用率
+  const memUsage = dynamicData.memory?.used_percent;
+  if (memUsage?.value !== undefined) {
+    records.push({
+      timestamp: now,
+      metric: 'memory' as const,
+      value: memUsage.value,
+      unit: memUsage.unit
+    });
+  }
+
+  // 网络下行
+  const netIn = dynamicData.network?.['pppoe-wan']?.incoming;
+  if (netIn?.value !== undefined) {
+    records.push({
+      timestamp: now,
+      metric: 'network_in' as const,
+      value: normalizeToBytes(netIn.value, netIn.unit),
+      unit: 'B/S'
+    });
+  }
+
+  // 网络上行
+  const netOut = dynamicData.network?.['pppoe-wan']?.outgoing;
+  if (netOut?.value !== undefined) {
+    records.push({
+      timestamp: now,
+      metric: 'network_out' as const,
+      value: normalizeToBytes(netOut.value, netOut.unit),
+      unit: 'B/S'
+    });
+  }
+
+  // 存储 IO
+  if (dynamicData.storage) {
+    let totalBytes = 0;
+    Object.values(dynamicData.storage).forEach((d: any) => {
+      const readBytes = normalizeToBytes(d.read.value, d.read.unit);
+      const writeBytes = normalizeToBytes(d.write.value, d.write.unit);
+      if (readBytes > 0) {
+        totalBytes += readBytes;
+      }
+      if (writeBytes > 0) {
+        totalBytes += writeBytes;
+      }
+    });
+    records.push({
+      timestamp: now,
+      metric: 'storage_io' as const,
+      value: totalBytes,
+      unit: 'B/S'
+    });
+  }
+
+  // 存储使用率
+  const storageKeys = Object.keys(dynamicData.storage || {}).filter(k => k !== 'total');
+  if (storageKeys.length > 0) {
+    const usage = dynamicData.storage[storageKeys[0]].used_percent;
+    records.push({
+      timestamp: now,
+      metric: 'storage_usage' as const,
+      value: usage.value,
+      unit: usage.unit
+    });
+  }
+
+  // 批量保存到数据库
+  if (records.length > 0) {
+    addHistoryBatch(records).catch(console.error);
   }
 };
 
@@ -76,6 +191,9 @@ const fetchData = async () => {
     data.dynamic = (await dRes.json()) as DynamicApiResponse;
     data.connection = (await cRes.json()) as ConnectionApiResponse;
     data.static = (await sRes.json()) as StaticApiResponse;
+
+    // 保存动态数据到数据库
+    saveDynamicDataToDB(data.dynamic);
 
     uiState.status = '运行中';
   } catch (e) {
