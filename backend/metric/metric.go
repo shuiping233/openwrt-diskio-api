@@ -790,6 +790,7 @@ func ReadStaticSystemMetric(reader FsReaderInterface, runner CommandRunnerInterf
 		deviceName = model.StringDefault
 	}
 	deviceName = strings.TrimSpace(deviceName)
+	deviceName = strings.Trim(deviceName, "\u0000")
 
 	hostname, err := reader.ReadFile(procPaths.SystemHostname())
 	if err != nil {
