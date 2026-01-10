@@ -15,6 +15,7 @@ import {
 import type { EChartsOption } from 'echarts';
 import { useDatabase } from '../useDatabase';
 import type { HistoryRecord, DynamicApiResponse, StorageData } from '../model';
+import { TimeRanges } from '../model';
 import { normalizeToBytes, formatIOBytes, formatBytes } from '../utils/convert';
 
 // 注册 ECharts 组件
@@ -46,18 +47,7 @@ function formatIOTooltip(value: number): string {
 
 // ================= 状态定义 =================
 
-const timeRanges = [
-  { label: '1m', value: 60 * 1000 },
-  { label: '10m', value: 10 * 60 * 1000 },
-  { label: '30m', value: 30 * 60 * 1000 },
-  { label: '1h', value: 60 * 60 * 1000 },
-  { label: '12h', value: 12 * 60 * 60 * 1000 },
-  { label: '1d', value: 24 * 60 * 60 * 1000 },
-  { label: '7d', value: 7 * 24 * 60 * 60 * 1000 },
-  { label: '30d', value: 30 * 24 * 60 * 60 * 1000 },
-];
-
-const defaultRange = timeRanges[0].value;
+const defaultRange = TimeRanges[0].value;
 
 // 新增全局时间范围控制
 const globalTimeRange = ref(defaultRange);
@@ -319,7 +309,7 @@ onMounted(async () => {
         <div class="relative">
           <select v-model="globalTimeRange" @change="handleGlobalRangeChange"
             class="bg-slate-900 border border-slate-600 text-white text-xs px-2 py-1 rounded outline-none focus:border-blue-500">
-            <option v-for="r in timeRanges" :key="r.value" :value="r.value">{{ r.label }}</option>
+            <option v-for="r in TimeRanges" :key="r.value" :value="r.value">{{ r.label }}</option>
           </select>
         </div>
       </div>
@@ -330,7 +320,7 @@ onMounted(async () => {
         class="bg-slate-800 border border-slate-700 rounded-xl p-4 relative group">
         <select v-model="chartStates[key].range" @change="handleRangeChange(key)"
           class="absolute top-6 right-16 z-10 bg-slate-900 border border-slate-600 text-xs text-slate-300 px-2 py-1 rounded outline-none opacity-100 transition-opacity">
-          <option v-for="r in timeRanges" :key="r.value" :value="r.value">{{ r.label }}</option>
+          <option v-for="r in TimeRanges" :key="r.value" :value="r.value">{{ r.label }}</option>
         </select>
         <v-chart :option="opt" :autoresize="true" style="height: 320px;" />
       </div>

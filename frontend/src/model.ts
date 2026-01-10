@@ -94,3 +94,20 @@ export interface UserSetting {
   key: string; // 键名，例如 'retention_days', 'theme'
   value: string | number | boolean; // 值
 }
+
+export const TimeRanges = [
+  { label: '1 分钟', value: 60 * 1000 },
+  { label: '10 分钟', value: 10 * 60 * 1000 },
+  { label: '30 分钟', value: 30 * 60 * 1000 },
+  { label: '1 小时', value: 60 * 60 * 1000 },
+  { label: '6 小时', value: 6 * 60 * 60 * 1000 },
+  { label: '12 小时', value: 12 * 60 * 60 * 1000 },
+  { label: '1 天', value: 24 * 60 * 60 * 1000 },
+  { label: '3 天', value: 3 * 24 * 60 * 60 * 1000 },
+  { label: '7 天', value: 7 * 24 * 60 * 60 * 1000 },
+  { label: '1 月', value: 30 * 24 * 60 * 60 * 1000 },
+  { label: '2 月', value: 60 * 24 * 60 * 60 * 1000 },
+  { label: '3 月', value: 90 * 24 * 60 * 60 * 1000 },
+  { label: '6 月', value: 180 * 24 * 60 * 60 * 1000 },
+  { label: '1 年', value: 365 * 24 * 60 * 60 * 1000 },
+];
