@@ -52,7 +52,7 @@ const uiState = reactive({
                                 {{ data.dynamic.cpu.total.temperature.value.toFixed(0) }}
                             </span>
                             <span class="text-slate-400 text-sm ml-1">{{ data.dynamic.cpu.total.temperature.unit
-                                }}</span>
+                            }}</span>
                         </div>
                     </div>
                 </div>
@@ -78,10 +78,12 @@ const uiState = reactive({
 
                     <!-- 右侧：具体使用量 -->
                     <div class="text-right">
-                        <span class="font-bold">{{ formatBytes(data.dynamic.memory.used.value, data.dynamic.memory.used.unit) }}</span>
+                        <span class="font-bold">{{ formatBytes(data.dynamic.memory.used.value,
+                            data.dynamic.memory.used.unit) }}</span>
                         <span class="text-slate-300 text-sm ml-0.5">{{ data.dynamic.memory.used.unit }}</span>
                         <span class="text-slate-400 mx-1">/</span>
-                        <span class="font-bold">{{ formatBytes(data.dynamic.memory.total.value, data.dynamic.memory.total.unit) }}</span>
+                        <span class="font-bold">{{ formatBytes(data.dynamic.memory.total.value,
+                            data.dynamic.memory.total.unit) }}</span>
                         <span class="text-slate-300 text-sm ml-0.5">{{ data.dynamic.memory.total.unit }}</span>
                     </div>
                 </div>
@@ -102,9 +104,10 @@ const uiState = reactive({
                     <div v-if="data.dynamic.network?.['pppoe-wan']?.outgoing" class="flex items-center justify-between">
                         <div class="text-orange-500">↑ 上行</div>
                         <div class="text-xl font-bold font-mono text-orange-500">
-                            {{ formatBytes(data.dynamic.network['pppoe-wan'].outgoing.value, data.dynamic.network['pppoe-wan'].outgoing.unit) }}
+                            {{ formatBytes(data.dynamic.network['pppoe-wan'].outgoing.value,
+                                data.dynamic.network['pppoe-wan'].outgoing.unit) }}
                             <span class="text-slate-400 text-sm">{{ data.dynamic.network['pppoe-wan'].outgoing.unit
-                            }}</span>
+                                }}</span>
                         </div>
                     </div>
 
@@ -113,9 +116,10 @@ const uiState = reactive({
                         class="flex items-center justify-between mb-1">
                         <div class="text-cyan-500">↓ 下行</div>
                         <div class="text-xl font-bold font-mono text-cyan-500">
-                            {{ formatBytes(data.dynamic.network['pppoe-wan'].incoming.value, data.dynamic.network['pppoe-wan'].incoming.unit) }}
+                            {{ formatBytes(data.dynamic.network['pppoe-wan'].incoming.value,
+                                data.dynamic.network['pppoe-wan'].incoming.unit) }}
                             <span class="text-slate-400 text-sm">{{ data.dynamic.network['pppoe-wan'].incoming.unit
-                            }}</span>
+                                }}</span>
                         </div>
                     </div>
                 </div>
@@ -128,9 +132,10 @@ const uiState = reactive({
                 <div v-if="data.dynamic.network?.['pppoe-wan']?.outgoing" class="flex items-center justify-between">
                     <div class="text-orange-500">↑ 上行</div>
                     <div class="text-xl font-bold font-mono text-orange-500">
-                        {{ formatBytes(data.dynamic.network.total.incoming.value, data.dynamic.network.total.incoming.unit) }}
+                        {{ formatBytes(data.dynamic.network.total.incoming.value,
+                            data.dynamic.network.total.incoming.unit) }}
                         <span class="text-slate-400 text-sm">{{ data.dynamic.network.total.incoming.unit
-                        }}</span>
+                            }}</span>
                     </div>
                 </div>
 
@@ -139,9 +144,10 @@ const uiState = reactive({
                     class="flex items-center justify-between mb-1">
                     <div class="text-cyan-500">↓ 下行</div>
                     <div class="text-xl font-bold font-mono text-cyan-500">
-                        {{ formatBytes(data.dynamic.network.total.outgoing.value, data.dynamic.network.total.outgoing.unit) }}
+                        {{ formatBytes(data.dynamic.network.total.outgoing.value,
+                            data.dynamic.network.total.outgoing.unit) }}
                         <span class="text-slate-400 text-sm">{{ data.dynamic.network.total.outgoing.unit
-                        }}</span>
+                            }}</span>
                     </div>
                 </div>
             </div>
@@ -186,7 +192,7 @@ const uiState = reactive({
                                 {{ dev.write.unit }}</span></div>
                         <div><span class="text-slate-500"></span></div>
                         <div><span class="text-slate-500">使用量:</span> <span class="font-mono">{{
-                             formatBytes(dev.used_percent.value, dev.used_percent.unit) }} {{
+                            formatBytes(dev.used_percent.value, dev.used_percent.unit) }} {{
                                     dev.used_percent.unit }}</span></div>
                         <div><span class="text-slate-500">总容量:</span> <span class="font-mono">{{
                             formatBytes(dev.total.value, dev.total.unit) }} {{
@@ -245,12 +251,14 @@ const uiState = reactive({
                     <h3 class="text-lg font-bold mb-4">总网卡流量</h3>
                     <div class="flex justify-between items-center">
                         <div class="text-xl font-bold font-mono text-cyan-500">↓ {{
-                            formatBytes(data.dynamic.network.total.incoming.value, data.dynamic.network.total.incoming.unit) }}
+                            formatBytes(data.dynamic.network.total.incoming.value,
+                                data.dynamic.network.total.incoming.unit) }}
                             {{
                                 data.dynamic.network.total.incoming.unit }} </div>
                         <div class="text-xl font-bold font-mono text-orange-500">↑ {{
-                            formatBytes(data.dynamic.network.total.outgoing.value, data.dynamic.network.total.outgoing.unit)
-                        }} {{
+                            formatBytes(data.dynamic.network.total.outgoing.value,
+                                data.dynamic.network.total.outgoing.unit)
+                            }} {{
                                 data.dynamic.network.total.outgoing.unit }} </div>
                     </div>
                 </div>
@@ -263,10 +271,12 @@ const uiState = reactive({
                                 class="text-slate-500 text-sm font-normal">IO</span>
                         </h3>
                         <div class="flex justify-between items-center">
-                            <div class="text-xl font-bold font-mono text-cyan-500">↓ {{ formatBytes(net.incoming.value, net.incoming.unit) }}
+                            <div class="text-xl font-bold font-mono text-cyan-500">↓ {{ formatBytes(net.incoming.value,
+                                net.incoming.unit) }}
                                 {{
                                     net.incoming.unit }} </div>
-                            <div class="text-xl font-bold font-mono text-orange-500">↑ {{ formatBytes(net.outgoing.value, net.outgoing.unit)
+                            <div class="text-xl font-bold font-mono text-orange-500">↑ {{
+                                formatBytes(net.outgoing.value, net.outgoing.unit)
                                 }} {{
                                     net.outgoing.unit }} </div>
                         </div>
@@ -311,12 +321,16 @@ const uiState = reactive({
                     :class="{ 'rotate-180': uiState.accordions.sysinfo }">▼</span>
             </div>
             <div v-show="uiState.accordions.sysinfo" class="bg-slate-800 border border-slate-700 rounded-xl p-6">
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6">
                     <div><span class="text-slate-500 block text-sm mb-1">OS:</span> <span class="font-medium">{{
                         data.static.system.os
                             }}</span></div>
+                    <div><span class="text-slate-500 block text-sm mb-1">Hostname:</span> <span class="font-medium">{{
+                        data.static.system.hostname }}</span></div>
                     <div><span class="text-slate-500 block text-sm mb-1">Kernel:</span> <span class="font-medium">{{
                         data.static.system.kernel }}</span></div>
+                    <div><span class="text-slate-500 block text-sm mb-1">Device:</span> <span class="font-medium">{{
+                        data.static.system.device_name }}</span></div>
                     <div><span class="text-slate-500 block text-sm mb-1">Arch:</span> <span class="font-medium">{{
                         data.static.system.arch }}</span></div>
                     <div><span class="text-slate-500 block text-sm mb-1">Timezone:</span> <span class="font-medium">{{

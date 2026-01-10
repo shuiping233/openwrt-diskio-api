@@ -55,6 +55,7 @@ export interface SystemStaticData {
   os: string;
   arch: string;
   timezone: string;
+  device_name: string;
 }
 
 export interface StaticApiResponse {
