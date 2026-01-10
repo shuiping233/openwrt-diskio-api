@@ -143,14 +143,15 @@ func readKernelVersion(runner CommandRunnerInterface) string {
 	if err != nil {
 		return model.StringDefault
 	}
-	return version
+
+	return strings.TrimSpace(version)
 }
 func readSystemArch(runner CommandRunnerInterface) string {
-	version, err := runner.Run("uname", "-m")
+	arch, err := runner.Run("uname", "-m")
 	if err != nil {
 		return model.StringDefault
 	}
-	return version
+	return strings.TrimSpace(arch)
 }
 
 // such as : "Asia/Shanghai" , default is "UTC"
@@ -782,16 +783,20 @@ func ReadStaticSystemMetric(reader FsReaderInterface, runner CommandRunnerInterf
 	if err != nil {
 		os = model.StringDefault
 	}
+	os = strings.TrimSpace(os)
 
 	deviceName, err := reader.ReadFile(procPaths.HardwareName())
 	if err != nil {
 		deviceName = model.StringDefault
 	}
+	deviceName = strings.TrimSpace(deviceName)
 
 	hostname, err := reader.ReadFile(procPaths.SystemHostname())
 	if err != nil {
 		hostname = model.StringDefault
 	}
+	hostname = strings.TrimSpace(hostname)
+
 	kernelVersion := readKernelVersion(runner)
 	arch := readSystemArch(runner)
 	timezone := readLocalTimeZone(reader, runner)
