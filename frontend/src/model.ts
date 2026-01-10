@@ -46,7 +46,7 @@ export interface IpConfig {
 }
 
 export interface NetworkStaticData {
-  [key: string]: IpConfig & { gateway?: string ; dns?: string[] }  ;
+  [key: string]: IpConfig & { gateway?: string; dns?: string[] };
 }
 
 export interface SystemStaticData {
@@ -85,9 +85,10 @@ export interface ConnectionApiResponse {
 export interface HistoryRecord {
   id?: number; // Dexie 自增 ID
   timestamp: number; // 时间戳
-  metric: 'cpu' | 'cpu_temp' | 'memory' | 'network_in' | 'network_out' | 'storage_io';
+  metric: 'cpu' | 'cpu_temp' | 'memory_total' | 'memory_used' | 'memory_used_percent' | 'network_in' | 'network_out' | 'storage_io' | 'storage_usage' | 'connections';
   value: number; // 数值
   unit: string; // 单位
+  label?: string; // 子标签，用于区分多条折线，例如 'cpu0', 'eth0-in', 'tcp' 等
 }
 
 // ================= 用户配置结构 =================

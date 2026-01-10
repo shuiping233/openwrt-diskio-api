@@ -12,6 +12,7 @@ import { useToast } from './useToast';
 import Toaster from './components/Toaster.vue';
 import { useDatabase } from './useDatabase'; // 新增导入
 import { normalizeToBytes } from './utils/convert'; // 新增导入
+import type { HistoryRecord } from "./model"; // 确保类型被正确导入
 
 const { addHistoryBatch, getConfig } = useDatabase();
 
@@ -69,110 +70,128 @@ const getStatusColor = (status: string): string => {
 /**
  * 将动态数据保存到数据库
  */
-const saveDynamicDataToDB = (dynamicData: DynamicApiResponse) => {
+const saveDynamicDataToDB = (dynamicData: DynamicApiResponse, connectionData: ConnectionApiResponse) => {
   if (!dynamicData) return;
-
   const now = Date.now();
-  const records = [];
+  const records: Omit<HistoryRecord, 'id'>[] = [];
 
-  // CPU 使用率
-  const cpuUsage = dynamicData.cpu?.total?.usage;
-  if (cpuUsage?.value !== undefined) {
-    records.push({
-      timestamp: now,
-      metric: 'cpu' as const,
-      value: cpuUsage.value,
-      unit: cpuUsage.unit
+  // 1. CPU: 每个核心一条记录
+  if (dynamicData.cpu) {
+    Object.entries(dynamicData.cpu).forEach(([key, core]) => {
+      if (key === 'total') return; // 跳过 total
+      records.push({
+        timestamp: now,
+        metric: 'cpu',
+        value: core.usage.value,
+        unit: core.usage.unit,
+        label: key // 例如 'cpu0'
+      });
     });
   }
 
-  // CPU 温度
+  // 2. CPU Temp: 平均值
   if (dynamicData.cpu) {
     let totalTemp = 0, count = 0;
-    Object.values(dynamicData.cpu).forEach((c: any) => {
-      if (c.temperature.value > 0) {
-        totalTemp += c.temperature.value;
-        count++;
-      }
-    });
+    Object.values(dynamicData.cpu).forEach((c: any) => { if (c.temperature.value > 0) { totalTemp += c.temperature.value; count++ } });
     if (count > 0) {
       const unit = Object.values(dynamicData.cpu)[0].temperature.unit;
       records.push({
         timestamp: now,
-        metric: 'cpu_temp' as const,
+        metric: 'cpu_temp',
         value: totalTemp / count,
-        unit: unit
+        unit: unit,
+        label: 'average' // 平均值
       });
     }
   }
 
-  // 内存使用率
-  const memUsage = dynamicData.memory?.used_percent;
-  if (memUsage?.value !== undefined) {
-    records.push({
-      timestamp: now,
-      metric: 'memory' as const,
-      value: memUsage.value,
-      unit: memUsage.unit
+  // 3. Memory: 两条记录 (Total 和 Used Percent)
+  if (dynamicData.memory) {
+    // 存已用量
+    if (dynamicData.memory.used) {
+      records.push({
+        timestamp: now,
+        metric: 'memory_used',
+        value: dynamicData.memory.used.value,
+        unit: dynamicData.memory.used.unit,
+        label: 'used'
+      });
+    }
+    // 存百分比
+    if (dynamicData.memory.used_percent) {
+      records.push({
+        timestamp: now,
+        metric: 'memory_used_percent',
+        value: dynamicData.memory.used_percent.value,
+        unit: dynamicData.memory.used_percent.unit,
+        label: 'percent'
+      });
+    }
+  }
+
+  // 4. Network In/Out: 每个网卡两条记录 (In/Out)
+  if (dynamicData.network) {
+    Object.entries(dynamicData.network).forEach(([iface, net]) => {
+      if (iface === 'total') return;
+      records.push({
+        timestamp: now,
+        metric: 'network_in',
+        value: net.incoming.value,
+        unit: net.incoming.unit,
+        label: `${iface}-in` // 例如 'pppoe-wan-in'
+      });
+      records.push({
+        timestamp: now,
+        metric: 'network_out',
+        value: net.outgoing.value,
+        unit: net.outgoing.unit,
+        label: `${iface}-out`
+      });
     });
   }
 
-  // 网络下行
-  const netIn = dynamicData.network?.['pppoe-wan']?.incoming;
-  if (netIn?.value !== undefined) {
-    records.push({
-      timestamp: now,
-      metric: 'network_in' as const,
-      value: normalizeToBytes(netIn.value, netIn.unit),
-      unit: 'B/S'
-    });
-  }
-
-  // 网络上行
-  const netOut = dynamicData.network?.['pppoe-wan']?.outgoing;
-  if (netOut?.value !== undefined) {
-    records.push({
-      timestamp: now,
-      metric: 'network_out' as const,
-      value: normalizeToBytes(netOut.value, netOut.unit),
-      unit: 'B/S'
-    });
-  }
-
-  // 存储 IO
+  // 5. Storage IO: 每个磁盘一条记录
   if (dynamicData.storage) {
-    let totalBytes = 0;
-    Object.values(dynamicData.storage).forEach((d: any) => {
-      const readBytes = normalizeToBytes(d.read.value, d.read.unit);
-      const writeBytes = normalizeToBytes(d.write.value, d.write.unit);
-      if (readBytes > 0) {
-        totalBytes += readBytes;
+    Object.entries(dynamicData.storage).forEach(([dev, d]) => {
+      if (dev === 'total') return;
+      // 归一化累加 IO
+      const totalBytes = normalizeToBytes(d.read.value, d.read.unit) + normalizeToBytes(d.write.value, d.write.unit);
+      if (totalBytes > 0) {
+        records.push({
+          timestamp: now,
+          metric: 'storage_io',
+          value: totalBytes,
+          unit: 'B/S',
+          label: dev // 例如 'sda1'
+        });
       }
-      if (writeBytes > 0) {
-        totalBytes += writeBytes;
-      }
-    });
-    records.push({
-      timestamp: now,
-      metric: 'storage_io' as const,
-      value: totalBytes,
-      unit: 'B/S'
     });
   }
 
-  // 存储使用率
-  const storageKeys = Object.keys(dynamicData.storage || {}).filter(k => k !== 'total');
-  if (storageKeys.length > 0) {
-    const usage = dynamicData.storage[storageKeys[0]].used_percent;
-    records.push({
-      timestamp: now,
-      metric: 'storage_usage' as const,
-      value: usage.value,
-      unit: usage.unit
+  // 6. Storage Usage: 每个磁盘一条记录
+  if (dynamicData.storage) {
+    Object.entries(dynamicData.storage).forEach(([dev, d]) => {
+      if (dev === 'total') return;
+      records.push({
+        timestamp: now,
+        metric: 'storage_usage',
+        value: d.used_percent.value,
+        unit: d.used_percent.unit,
+        label: dev
+      });
     });
   }
 
-  // 批量保存到数据库
+  // 7. Connections: 4条记录 (Total, TCP, UDP, Other)
+  if (connectionData?.counts) {
+    const counts = connectionData.counts;
+    records.push({ timestamp: now, metric: 'connections', value: counts.tcp, unit: 'count', label: 'TCP' });
+    records.push({ timestamp: now, metric: 'connections', value: counts.udp, unit: 'count', label: 'UDP' });
+    records.push({ timestamp: now, metric: 'connections', value: counts.other, unit: 'count', label: 'Other' });
+    records.push({ timestamp: now, metric: 'connections', value: (counts.tcp + counts.udp + counts.other), unit: 'count', label: 'Total' });
+  }
+
+  // 批量存入 DB
   if (records.length > 0) {
     addHistoryBatch(records).catch(console.error);
   }
