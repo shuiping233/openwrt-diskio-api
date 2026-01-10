@@ -5,6 +5,13 @@
 > [!WARNING]  
 > 本项目仍在开发中,仪表盘页面尚未足够完善,请谨慎在生产环境使用
 
+## 仪器盘截图
+
+![system preview](./images/image-0.png)
+![network connection detail](./images/image-1.png)
+![monitoring charts](./images/image-2.png)
+![settings window](./images/image-3.png)
+
 ## 使用方法
 
 1. 从[releases](https://github.com/shuiping233/openwrt-diskio-api/releases)下载最新构建产物
