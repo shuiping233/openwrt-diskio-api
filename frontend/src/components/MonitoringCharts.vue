@@ -329,7 +329,7 @@ onMounted(async () => {
       <div v-for="(opt, key) in chartOptions" :key="key"
         class="bg-slate-800 border border-slate-700 rounded-xl p-4 relative group">
         <select v-model="chartStates[key].range" @change="handleRangeChange(key)"
-          class="absolute top-6 right-16 z-10 bg-slate-900 border border-slate-600 text-xs text-slate-300 px-2 py-1 rounded outline-none opacity-0 group-hover:opacity-100 transition-opacity">
+          class="absolute top-6 right-16 z-10 bg-slate-900 border border-slate-600 text-xs text-slate-300 px-2 py-1 rounded outline-none opacity-100 transition-opacity">
           <option v-for="r in timeRanges" :key="r.value" :value="r.value">{{ r.label }}</option>
         </select>
         <v-chart :option="opt" :autoresize="true" style="height: 320px;" />
