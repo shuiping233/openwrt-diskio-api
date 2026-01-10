@@ -60,7 +60,8 @@ watch(() => props.isOpen, (newVal) => {
   <Transition enter-active-class="transition-opacity duration-200 ease-out" enter-from-class="opacity-0"
     enter-to-class="opacity-100" leave-active-class="transition-opacity duration-200 ease-in"
     leave-from-class="opacity-100" leave-to-class="opacity-0">
-    <div v-if="isOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-none">
+    <div v-if="isOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-none"
+      @click="emit('update:isOpen', false)">
       <!-- 模态框主体 -->
       <div
         class="bg-slate-800 rounded-xl border border-slate-700 w-full max-w-lg shadow-2xl relative transform transition-all"
