@@ -13,6 +13,8 @@ import Toaster from './components/Toaster.vue';
 import { useDatabase } from './useDatabase'; // 新增导入
 import { normalizeToBytes } from './utils/convert'; // 新增导入
 
+const { addHistoryBatch, getConfig } = useDatabase();
+
 // ================= 2. 状态定义 =================
 
 const data = reactive({
@@ -29,7 +31,7 @@ enum Tab {
   MonitoringCharts = 'monitoringCharts'
 }
 
-
+const enableMetricRecord = ref(false);
 
 const uiState = reactive({
   activeTab: Tab.System as Tab,
@@ -63,7 +65,6 @@ const getStatusColor = (status: string): string => {
 
 // ================= 数据存储逻辑 =================
 
-const { addHistoryBatch } = useDatabase();
 
 /**
  * 将动态数据保存到数据库
@@ -201,7 +202,9 @@ const fetchData = async () => {
     data.static = (await sRes.json()) as StaticApiResponse;
 
     // 保存动态数据到数据库
-    saveDynamicDataToDB(data.dynamic);
+    if (enableMetricRecord.value) {
+      saveDynamicDataToDB(data.dynamic);
+    }
 
     uiState.status = '运行中';
   } catch (e) {
@@ -235,7 +238,10 @@ const startPolling = () => {
 
 // ================= 5. 生命周期 =================
 
-onMounted(() => {
+onMounted(async () => {
+  const enabled = await getConfig<boolean>('enable_metric_record');
+  if (enabled) enableMetricRecord.value = enabled;
+
   fetchData();
   startPolling();
 });

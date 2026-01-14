@@ -17,17 +17,21 @@ const { getConfig, setConfig, clearHistory } = useDatabase();
 const { success, error } = useToast();
 
 const retentionDays = ref(7);
+const enableMetricRecord = ref(false);
 
 // 加载配置
 onMounted(async () => {
   const days = await getConfig<number>('retention_days');
   if (days) retentionDays.value = days;
+  
+  const enabled = await getConfig<boolean>('enable_metric_record');
+  if (enabled) enableMetricRecord.value = enabled;
 });
 
 // 保存配置 (即时生效)
-const handleSave = async () => {
-  await setConfig('retention_days', retentionDays.value);
-  success('保存天数设置已更新');
+const handleSave = async (key: string, value: any) => {
+  await setConfig(key, value);
+  success(`设置已更新，"${key}" 已设置为 "${value}"`);
 };
 
 // 清空数据
@@ -87,18 +91,37 @@ watch(() => props.isOpen, (newVal) => {
               历史数据监控
             </h3>
 
+
+
             <div class="mt-4 space-y-4">
-              <!-- 配置 1: 数据保存天数 -->
+              <!-- 配置 : 启用数据保存功能 -->
               <div class="flex justify-between items-center">
-                <label class="text-slate-300 text-sm">数据保留天数</label>
-                <input type="number" min="1" max="365" v-model.number="retentionDays" @change="handleSave"
-                  class="bg-slate-900 border border-slate-600 rounded px-3 py-1.5 w-24 text-white outline-none focus:border-blue-500 transition-colors" />
+                <label class="text-slate-300 text-sm">启用历史图表数据记录</label>
+                <button type="button"
+                  @click="enableMetricRecord = !enableMetricRecord; handleSave('enable_metric_record', enableMetricRecord)"
+                  class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors"
+                  :class="enableMetricRecord ? 'bg-blue-600' : 'bg-slate-600'">
+                  <span class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform"
+                    :class="enableMetricRecord ? 'translate-x-6' : 'translate-x-1'" />
+                </button>
+              </div>
+              <!-- 配置 : 数据保存天数 -->
+              <div class="flex justify-between items-center">
+                <label class="text-sm" :class="enableMetricRecord ? 'text-slate-300' : 'text-slate-500'">
+                  数据保留天数
+                </label>
+                <input type="number" min="1" max="365" v-model.number="retentionDays"
+                  @change="handleSave('retention_days', retentionDays)" :disabled="!enableMetricRecord"
+                  class="border rounded px-3 py-1.5 w-24 outline-none transition-colors" :class="enableMetricRecord
+                    ? 'bg-slate-900 border-slate-600 text-white focus:border-blue-500'
+                    : 'bg-slate-800 border-slate-700 text-slate-500 cursor-not-allowed'
+                    " />
               </div>
               <p class="text-xs text-slate-500">
                 超过此天数的历史图表数据将被自动清理。
               </p>
 
-              <!-- 配置 2: 清空所有数据 -->
+              <!-- 配置 : 清空所有数据 -->
               <div>
                 <button @click="handleClear"
                   class="w-full mt-2 bg-red-600 hover:bg-red-500 text-white py-2 rounded transition-colors text-sm font-semibold flex items-center justify-center gap-2">
