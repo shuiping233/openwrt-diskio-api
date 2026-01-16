@@ -75,16 +75,16 @@ const saveDynamicDataToDB = (dynamicData: DynamicApiResponse, connectionData: Co
   const now = Date.now();
   const records: Omit<HistoryRecord, 'id'>[] = [];
 
-  // 1. CPU: 每个核心一条记录
+  // 1. CPU: 每个核心一条记录（用于CPU分类）
   if (dynamicData.cpu) {
     Object.entries(dynamicData.cpu).forEach(([key, core]) => {
-      if (key === 'total') return; // 跳过 total
+      if (key === 'total') return;
       records.push({
         timestamp: now,
         metric: 'cpu',
         value: core.usage.value,
         unit: core.usage.unit,
-        label: key // 例如 'cpu0'
+        label: key
       });
     });
   }
@@ -100,14 +100,13 @@ const saveDynamicDataToDB = (dynamicData: DynamicApiResponse, connectionData: Co
         metric: 'cpu_temp',
         value: totalTemp / count,
         unit: unit,
-        label: 'average' // 平均值
+        label: 'average'
       });
     }
   }
 
-  // 3. Memory: 两条记录 (Total 和 Used Percent)
+  // 3. Memory: 内存使用量和百分比
   if (dynamicData.memory) {
-    // 存已用量
     if (dynamicData.memory.used) {
       records.push({
         timestamp: now,
@@ -117,7 +116,6 @@ const saveDynamicDataToDB = (dynamicData: DynamicApiResponse, connectionData: Co
         label: 'used'
       });
     }
-    // 存百分比
     if (dynamicData.memory.used_percent) {
       records.push({
         timestamp: now,
@@ -129,7 +127,46 @@ const saveDynamicDataToDB = (dynamicData: DynamicApiResponse, connectionData: Co
     }
   }
 
-  // 4. Network In/Out: 每个网卡两条记录 (In/Out)
+  // 4. Network: 总网卡 IO 和 pppoe-wan IO
+  if (dynamicData.network?.total) {
+    const totalIn = dynamicData.network.total.incoming;
+    const totalOut = dynamicData.network.total.outgoing;
+    records.push({
+      timestamp: now,
+      metric: 'network_in',
+      value: totalIn.value,
+      unit: totalIn.unit,
+      label: 'total-down'
+    });
+    records.push({
+      timestamp: now,
+      metric: 'network_out',
+      value: totalOut.value,
+      unit: totalOut.unit,
+      label: 'total-up'
+    });
+  }
+
+  if (dynamicData.network?.['pppoe-wan']) {
+    const pppoeIn = dynamicData.network['pppoe-wan'].incoming;
+    const pppoeOut = dynamicData.network['pppoe-wan'].outgoing;
+    records.push({
+      timestamp: now,
+      metric: 'network_in',
+      value: pppoeIn.value,
+      unit: pppoeIn.unit,
+      label: 'pppoe-wan-down'
+    });
+    records.push({
+      timestamp: now,
+      metric: 'network_out',
+      value: pppoeOut.value,
+      unit: pppoeOut.unit,
+      label: 'pppoe-wan-up'
+    });
+  }
+
+  // 5. Network: 每个网卡的 IO
   if (dynamicData.network) {
     Object.entries(dynamicData.network).forEach(([iface, net]) => {
       if (iface === 'total') return;
@@ -138,51 +175,76 @@ const saveDynamicDataToDB = (dynamicData: DynamicApiResponse, connectionData: Co
         metric: 'network_in',
         value: net.incoming.value,
         unit: net.incoming.unit,
-        label: `${iface}-in` // 例如 'pppoe-wan-in'
+        label: `${iface}-down`
       });
       records.push({
         timestamp: now,
         metric: 'network_out',
         value: net.outgoing.value,
         unit: net.outgoing.unit,
-        label: `${iface}-out`
+        label: `${iface}-up`
       });
     });
   }
 
-  // 5. Storage IO: 每个磁盘一条记录
+  // 6. Storage: 总 IO
+  if (dynamicData.storage) {
+    let totalBytes = 0;
+    Object.values(dynamicData.storage).forEach((d: any) => {
+      const readBytes = normalizeToBytes(d.read.value, d.read.unit);
+      const writeBytes = normalizeToBytes(d.write.value, d.write.unit);
+      if (readBytes > 0) totalBytes += readBytes;
+      if (writeBytes > 0) totalBytes += writeBytes;
+    });
+    if (totalBytes > 0) {
+      records.push({
+        timestamp: now,
+        metric: 'storage_io',
+        value: totalBytes,
+        unit: 'B/S',
+        label: 'total'
+      });
+    }
+  }
+
+  // 7. Storage: 每个磁盘的 IO 和存储空间
   if (dynamicData.storage) {
     Object.entries(dynamicData.storage).forEach(([dev, d]) => {
       if (dev === 'total') return;
-      // 归一化累加 IO
-      const totalBytes = normalizeToBytes(d.read.value, d.read.unit) + normalizeToBytes(d.write.value, d.write.unit);
-      if (totalBytes > 0) {
+
+      const readBytes = normalizeToBytes(d.read.value, d.read.unit);
+      const writeBytes = normalizeToBytes(d.write.value, d.write.unit);
+
+      if (readBytes > 0) {
         records.push({
           timestamp: now,
           metric: 'storage_io',
-          value: totalBytes,
+          value: readBytes,
           unit: 'B/S',
-          label: dev // 例如 'sda1'
+          label: `${dev}-read`
         });
       }
-    });
-  }
+      if (writeBytes > 0) {
+        records.push({
+          timestamp: now,
+          metric: 'storage_io',
+          value: writeBytes,
+          unit: 'B/S',
+          label: `${dev}-write`
+        });
+      }
 
-  // 6. Storage Usage: 每个磁盘一条记录
-  if (dynamicData.storage) {
-    Object.entries(dynamicData.storage).forEach(([dev, d]) => {
-      if (dev === 'total') return;
       records.push({
         timestamp: now,
-        metric: 'storage_usage',
-        value: d.used_percent.value,
-        unit: d.used_percent.unit,
+        metric: 'storage_space',
+        value: d.used.value,
+        unit: d.used.unit,
         label: dev
       });
     });
   }
 
-  // 7. Connections: 4条记录 (Total, TCP, UDP, Other)
+  // 8. Connections: 4条记录 (Total, TCP, UDP, Other)
   if (connectionData?.counts) {
     const counts = connectionData.counts;
     records.push({ timestamp: now, metric: 'connections', value: counts.tcp, unit: 'count', label: 'TCP' });
@@ -191,7 +253,6 @@ const saveDynamicDataToDB = (dynamicData: DynamicApiResponse, connectionData: Co
     records.push({ timestamp: now, metric: 'connections', value: (counts.tcp + counts.udp + counts.other), unit: 'count', label: 'Total' });
   }
 
-  // 批量存入 DB
   if (records.length > 0) {
     addHistoryBatch(records).catch(console.error);
   }

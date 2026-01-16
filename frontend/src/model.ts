@@ -85,7 +85,7 @@ export interface ConnectionApiResponse {
 export interface HistoryRecord {
   id?: number; // Dexie 自增 ID
   timestamp: number; // 时间戳
-  metric: 'cpu' | 'cpu_temp' | 'memory_total' | 'memory_used' | 'memory_used_percent' | 'network_in' | 'network_out' | 'storage_io' | 'storage_usage' | 'connections';
+  metric: 'cpu' | 'cpu_temp' | 'memory_total' | 'memory_used' | 'memory_used_percent' | 'network_in' | 'network_out' | 'storage_io' | 'storage_usage' | 'connections' | 'storage_space';
   value: number; // 数值
   unit: string; // 单位
   label?: string; // 子标签，用于区分多条折线，例如 'cpu0', 'eth0-in', 'tcp' 等
