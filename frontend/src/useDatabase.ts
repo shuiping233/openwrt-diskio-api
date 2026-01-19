@@ -34,7 +34,7 @@ export function useDatabase() {
    */
   const getAccordionState = async (key: string): Promise<boolean> => {
     const state = await db.settings.get('accordion_' + key);
-    return state?.value === true; // 默认展开为 true
+    return state ? state.value === true : true; // 默认展开为 true
   };
 
   /**

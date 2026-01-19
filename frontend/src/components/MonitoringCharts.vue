@@ -17,7 +17,8 @@ import type { EChartsOption } from 'echarts';
 import { useDatabase } from '../useDatabase';
 import type { HistoryRecord, DynamicApiResponse, StorageData } from '../model';
 import { TimeRanges } from '../model';
-import { normalizeToBytes, formatIOBytes, formatBytes } from '../utils/convert';
+import { normalizeToBytes, formatIOBytes, BytesFixed, covertDataBytes, convertToBytes } from '../utils/convert';
+import { dataColorPaletteTask } from 'echarts/types/src/visual/style.js';
 
 // 注册 ECharts 组件
 use([
@@ -97,7 +98,7 @@ function getFixedAxisOption(title: string, color: string, unit: string, min?: nu
       textStyle: { color: '#fff' },
       formatter: (params: any) => {
         const param = params[0];
-        return `${param.seriesName}<br/>${new Date(param.value[0]).toLocaleString()}<br/>${formatBytes(param.value[1], unit)} ${unit}`;
+        return `${param.seriesName}<br/>${new Date(param.value[0]).toLocaleString()}<br/>${BytesFixed(param.value[1], unit)} ${unit}`;
       }
     },
     grid: { left: 40, right: 20, bottom: 30, top: 60, containLabel: false },
@@ -206,7 +207,7 @@ const chartOptions = reactive<Record<string, EChartsOption>>({
   // 基本指标
   cpu_total: getFixedAxisOption('CPU 总占用', '#3b82f6', '%', 0, 100),
   cpu_temp: getFixedAxisOption('CPU 温度', '#f59e0b', '°C', 0, 120),
-  memory_percent: getFixedAxisOption('内存占用比例', '#8b5cf6', '%', 0, 100),
+  memory_used_percent: getFixedAxisOption('内存占用比例', '#8b5cf6', '%', 0, 100),
   connections: getMultiSeriesOption('网络连接数', [
     { type: 'line', name: 'TCP', showSymbol: false, data: [], lineStyle: { width: 2, color: '#10b981' }, smooth: false },
     { type: 'line', name: 'UDP', showSymbol: false, data: [], lineStyle: { width: 2, color: '#f59e0b' }, smooth: false },
@@ -228,15 +229,12 @@ const chartOptions = reactive<Record<string, EChartsOption>>({
 
   // 存储分类 - 总 IO
   storage_total_io: getIOOption('总磁盘 IO', '#ec4899'),
-
-  // 内存分类 - 使用量
-  memory_used: getFixedAxisOption('内存使用量', '#8b5cf6', 'B', 0, undefined),
 });
 
 // 计算属性：过滤各分类的图表
 const getBasicCharts = computed(() => {
   return Object.entries(chartOptions).filter(([key]) =>
-    ['cpu_total', 'cpu_temp', 'memory_percent', 'connections', 'network_total', 'network_pppoe_wan', 'storage_total_io'].includes(key)
+    ['cpu_total', 'cpu_temp', 'memory_used_percent', 'connections', 'network_total', 'network_pppoe_wan', 'storage_total_io'].includes(key)
   );
 });
 
@@ -248,7 +246,7 @@ const getCpuCoreCharts = computed(() => {
 
 const getMemoryCharts = computed(() => {
   return Object.entries(chartOptions).filter(([key]) =>
-    ['memory_used', 'memory_percent'].includes(key)
+    ['memory_used', 'memory_used_percent'].includes(key)
   );
 });
 
@@ -284,7 +282,8 @@ const loadHistoryAndRender = async (key: string) => {
       const normalizedValue = normalizeToBytes(item.value, item.unit);
       return [item.timestamp, normalizedValue] as [number, number];
     });
-  } else {
+  }
+  else {
     seriesData = data.map(item => [item.timestamp, item.value] as [number, number]);
   }
 
@@ -491,6 +490,19 @@ const initCpuCoreCharts = (data: DynamicApiResponse) => {
   }
 };
 
+// 初始化内存使用量图表
+const initMemoryUsageCharts = (data: DynamicApiResponse) => {
+  if (data.memory) {
+    const chartKey = 'memory_used';
+    if (!chartOptions[chartKey]) {
+      chartOptions[chartKey] = getFixedAxisOption('内存使用量', '#8b5cf6', data.memory.total.unit, 0, data.memory.total.value);
+      if (!chartStates[chartKey]) {
+        chartStates[chartKey] = { range: globalTimeRange.value };
+      }
+    }
+  }
+};
+
 // 初始化网卡 IO 图表
 const initNetworkIfaceCharts = (data: DynamicApiResponse) => {
   if (data.network) {
@@ -583,6 +595,7 @@ watch(() => props.data.dynamic, (newData) => {
   initCpuCoreCharts(newData);
   initNetworkIfaceCharts(newData);
   initStorageCharts(newData);
+  initMemoryUsageCharts(newData);
 
   // 基本指标 - CPU Total
   const cpuUsage = newData.cpu?.total?.usage;
@@ -600,7 +613,7 @@ watch(() => props.data.dynamic, (newData) => {
 
   // 基本指标 - Memory Percent
   const memUsage = newData.memory?.used_percent;
-  if (memUsage?.value !== undefined) appendDataPoint('memory_percent', now, memUsage.value, memUsage.unit);
+  if (memUsage?.value !== undefined) appendDataPoint('memory_used_percent', now, memUsage.value, memUsage.unit);
 
   // 基本指标 - Connections
   if (props.data.connection?.counts) {
@@ -634,7 +647,10 @@ watch(() => props.data.dynamic, (newData) => {
     if (memOption && memOption.yAxis) {
       (memOption.yAxis as any).max = memMax;
     }
-    appendDataPoint('memory_used', now, memUsed.value, memUsed.unit);
+    if (memUsed?.value !== undefined) {
+      const [value, unit] = covertDataBytes(memUsed.value, memUsed.unit, newData.memory?.total?.unit);
+      appendDataPoint('memory_used', now, value, unit);
+    }
   }
 
   // 网络 - 总网卡 IO
@@ -779,7 +795,7 @@ onMounted(async () => {
   // 加载基本指标
   await loadHistoryAndRender('cpu_total');
   await loadHistoryAndRender('cpu_temp');
-  await loadHistoryAndRender('memory_percent');
+  await loadHistoryAndRender('memory_used_percent');
   await loadConnectionsHistory();
 
   // 加载网络数据

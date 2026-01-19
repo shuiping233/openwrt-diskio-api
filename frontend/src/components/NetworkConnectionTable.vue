@@ -12,7 +12,7 @@ import {
 } from '@tanstack/vue-table';
 import type { ConnectionApiResponse } from '../model';
 import { compressIPv6 } from '../utils/ipv6';
-import { convertToBytes,formatBytes } from '../utils/convert';
+import { convertToBytes, BytesFixed } from '../utils/convert';
 import { useToast } from '../useToast';
 
 // Props
@@ -31,7 +31,7 @@ watch(globalFilter, (newFilter) => {
 const displayData = computed(() => {
   const list = props.connectionData?.connections || [];
   if (list.length === 0) return [];
-  
+
   // 使用 Set 来跟踪已见过的连接标识符，防止重复
   const seen = new Set();
   return list.filter(connection => {
@@ -40,7 +40,7 @@ const displayData = computed(() => {
     // 对端点进行排序以处理双向连接
     const endpoints = [endpointA, endpointB].sort();
     const key = `${endpoints[0]}<->${endpoints[1]}-${connection.protocol}`;
-    
+
     if (seen.has(key)) {
       return false; // 过滤掉重复项
     }
@@ -60,8 +60,8 @@ const formatIP = (ip: string | undefined, family: string | undefined): string =>
 
 // 复制功能
 const copyInfo = (row: any) => {
-  let source_ip  : string = row.source_ip
-  let destination_ip  : string = row.destination_ip
+  let source_ip: string = row.source_ip
+  let destination_ip: string = row.destination_ip
 
   if (row.ip_family?.toUpperCase() === 'IPV6') {
     source_ip = `[${compressIPv6(row.source_ip)}]`;
@@ -91,17 +91,17 @@ const copyInfo = (row: any) => {
 const fallbackCopyTextToClipboard = (text: string) => {
   const textArea = document.createElement('textarea');
   textArea.value = text;
-  
+
   // 避免滚动到底部
   textArea.style.top = '0';
   textArea.style.left = '0';
   textArea.style.position = 'fixed';
   textArea.style.opacity = '0';
-  
+
   document.body.appendChild(textArea);
   textArea.focus();
   textArea.select();
-  
+
   try {
     const successful = document.execCommand('copy');
     if (successful) {
@@ -116,7 +116,7 @@ const fallbackCopyTextToClipboard = (text: string) => {
     const { error } = useToast();
     error('复制失败，请手动复制');
   }
-  
+
   document.body.removeChild(textArea);
 };
 
@@ -226,7 +226,7 @@ const columns = [
     header: '传输情况',
     cell: (info) => {
       const row = info.row.original;
-      return h('span', { class: 'text-slate-300' }, formatBytes(row.traffic.value,row.traffic.unit) + ' ' + row.traffic.unit + ' (' + row.packets + ' Pkgs.)');
+      return h('span', { class: 'text-slate-300' }, BytesFixed(row.traffic.value, row.traffic.unit) + ' ' + row.traffic.unit + ' (' + row.packets + ' Pkgs.)');
     },
     sortingFn: (rowA, rowB) => {
       const valA = rowA.original.traffic.value || 0;
@@ -247,7 +247,7 @@ const columns = [
       const packets = row.original.packets || 0;
 
       // 格式化后的值
-      const formattedValue = formatBytes(trafficValue, trafficUnit);
+      const formattedValue = BytesFixed(trafficValue, trafficUnit);
       const fullDisplayValue = `${formattedValue} ${trafficUnit} (${packets} Pkgs.)`;
 
       // 转换为小写进行比较
@@ -316,7 +316,7 @@ const table = useVueTable({
     const endpointB = `${row.destination_ip}:${row.destination_port}`;
     const endpoints = [endpointA, endpointB].sort(); // 排序确保一致性
     const baseId = `${endpoints[0]}<->${endpoints[1]}-${row.protocol}`;
-    
+
     // 添加一个稳定的唯一标识符，基于连接信息和原始索引
     return `${baseId}-${row.traffic.value}-${row.packets}-${index}`;
   },

@@ -11,7 +11,7 @@ import MonitoringCharts from './components/MonitoringCharts.vue';
 import { useToast } from './useToast';
 import Toaster from './components/Toaster.vue';
 import { useDatabase } from './useDatabase'; // 新增导入
-import { normalizeToBytes } from './utils/convert'; // 新增导入
+import { covertDataBytes, normalizeToBytes } from './utils/convert'; // 新增导入
 import type { HistoryRecord } from "./model"; // 确保类型被正确导入
 
 const { addHistoryBatch, getConfig } = useDatabase();
@@ -75,21 +75,20 @@ const saveDynamicDataToDB = (dynamicData: DynamicApiResponse, connectionData: Co
   const now = Date.now();
   const records: Omit<HistoryRecord, 'id'>[] = [];
 
-  // 1. CPU: 每个核心一条记录（用于CPU分类）
-  if (dynamicData.cpu) {
-    Object.entries(dynamicData.cpu).forEach(([key, core]) => {
-      if (key === 'total') return;
-      records.push({
-        timestamp: now,
-        metric: 'cpu',
-        value: core.usage.value,
-        unit: core.usage.unit,
-        label: key
-      });
+
+  // CPU 使用率
+  const cpuUsage = dynamicData.cpu?.total?.usage;
+  if (cpuUsage?.value !== undefined) {
+    records.push({
+      timestamp: now,
+      metric: 'cpu_total',
+      value: cpuUsage.value,
+      unit: cpuUsage.unit,
+      label: 'total'
     });
   }
 
-  // 2. CPU Temp: 平均值
+  // 1. CPU Temp: 平均值
   if (dynamicData.cpu) {
     let totalTemp = 0, count = 0;
     Object.values(dynamicData.cpu).forEach((c: any) => { if (c.temperature.value > 0) { totalTemp += c.temperature.value; count++ } });
@@ -108,11 +107,12 @@ const saveDynamicDataToDB = (dynamicData: DynamicApiResponse, connectionData: Co
   // 3. Memory: 内存使用量和百分比
   if (dynamicData.memory) {
     if (dynamicData.memory.used) {
+      const [value, unit] = covertDataBytes(dynamicData.memory.used.value, dynamicData.memory.used.unit, dynamicData.memory.total.unit);
       records.push({
         timestamp: now,
         metric: 'memory_used',
-        value: dynamicData.memory.used.value,
-        unit: dynamicData.memory.used.unit,
+        value: value,
+        unit: unit,
         label: 'used'
       });
     }
@@ -166,28 +166,7 @@ const saveDynamicDataToDB = (dynamicData: DynamicApiResponse, connectionData: Co
     });
   }
 
-  // 5. Network: 每个网卡的 IO
-  if (dynamicData.network) {
-    Object.entries(dynamicData.network).forEach(([iface, net]) => {
-      if (iface === 'total') return;
-      records.push({
-        timestamp: now,
-        metric: 'network_in',
-        value: net.incoming.value,
-        unit: net.incoming.unit,
-        label: `${iface}-down`
-      });
-      records.push({
-        timestamp: now,
-        metric: 'network_out',
-        value: net.outgoing.value,
-        unit: net.outgoing.unit,
-        label: `${iface}-up`
-      });
-    });
-  }
-
-  // 6. Storage: 总 IO
+  // 5. Storage: 总 IO
   if (dynamicData.storage) {
     let totalBytes = 0;
     Object.values(dynamicData.storage).forEach((d: any) => {
@@ -207,44 +186,7 @@ const saveDynamicDataToDB = (dynamicData: DynamicApiResponse, connectionData: Co
     }
   }
 
-  // 7. Storage: 每个磁盘的 IO 和存储空间
-  if (dynamicData.storage) {
-    Object.entries(dynamicData.storage).forEach(([dev, d]) => {
-      if (dev === 'total') return;
-
-      const readBytes = normalizeToBytes(d.read.value, d.read.unit);
-      const writeBytes = normalizeToBytes(d.write.value, d.write.unit);
-
-      if (readBytes > 0) {
-        records.push({
-          timestamp: now,
-          metric: 'storage_io',
-          value: readBytes,
-          unit: 'B/S',
-          label: `${dev}-read`
-        });
-      }
-      if (writeBytes > 0) {
-        records.push({
-          timestamp: now,
-          metric: 'storage_io',
-          value: writeBytes,
-          unit: 'B/S',
-          label: `${dev}-write`
-        });
-      }
-
-      records.push({
-        timestamp: now,
-        metric: 'storage_space',
-        value: d.used.value,
-        unit: d.used.unit,
-        label: dev
-      });
-    });
-  }
-
-  // 8. Connections: 4条记录 (Total, TCP, UDP, Other)
+  // 6. Connections: 4条记录 (Total, TCP, UDP, Other)
   if (connectionData?.counts) {
     const counts = connectionData.counts;
     records.push({ timestamp: now, metric: 'connections', value: counts.tcp, unit: 'count', label: 'TCP' });
