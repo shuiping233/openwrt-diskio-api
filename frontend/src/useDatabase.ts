@@ -3,9 +3,9 @@ import { db } from './utils/db';
 import type { HistoryRecord, UserSetting } from './model';
 
 export function useDatabase() {
-  
+
   // ================= 配置 =================
-  
+
   /**
    * 获取配置项
    */
@@ -27,6 +27,23 @@ export function useDatabase() {
   const deleteConfig = async (key: string) => {
     await db.settings.delete(key);
   };
+
+  // ================= UI 状态 =================
+  /**
+   * 获取折叠面板状态
+   */
+  const getAccordionState = async (key: string): Promise<boolean> => {
+    const state = await db.settings.get('accordion_' + key);
+    return state ? state.value === true : true; // 默认展开为 true
+  };
+
+  /**
+   * 设置折叠面板状态
+   */
+  const setAccordionState = async (key: string, isOpen: boolean) => {
+    await db.settings.put({ key: 'accordion_' + key, value: isOpen });
+  };
+
 
   // ================= 历史数据 =================
 
@@ -58,7 +75,7 @@ export function useDatabase() {
    * @param timeRange 时间范围，默认查最近24小时(毫秒)
    */
   const getHistory = async (
-    metric?: HistoryRecord['metric'], 
+    metric?: HistoryRecord['metric'],
     timeRange: number = 24 * 60 * 60 * 1000
   ): Promise<HistoryRecord[]> => {
     const endTime = Date.now();
@@ -95,12 +112,12 @@ export function useDatabase() {
   const cleanOldHistory = async (metric: string) => {
     const retentionDays = (await getConfig<number>('retention_days')) || 7;
     const cutoffTime = Date.now() - (retentionDays * 24 * 60 * 60 * 1000);
-    
+
     const count = await db.history
       .where('metric').equals(metric)
       .and(item => item.timestamp < cutoffTime)
       .delete();
-      
+
     if (count > 0) {
       console.log(`[DB] Cleaned ${count} old records for ${metric}`);
     }
@@ -111,6 +128,9 @@ export function useDatabase() {
     getConfig,
     setConfig,
     deleteConfig,
+    // UI State
+    getAccordionState,
+    setAccordionState,
     // History
     addHistory,
     addHistoryBatch,

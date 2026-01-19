@@ -11,7 +11,8 @@ import MonitoringCharts from './components/MonitoringCharts.vue';
 import { useToast } from './useToast';
 import Toaster from './components/Toaster.vue';
 import { useDatabase } from './useDatabase'; // 新增导入
-import { normalizeToBytes } from './utils/convert'; // 新增导入
+import { covertDataBytes, normalizeToBytes } from './utils/convert'; // 新增导入
+import type { HistoryRecord } from "./model"; // 确保类型被正确导入
 
 const { addHistoryBatch, getConfig } = useDatabase();
 
@@ -69,110 +70,130 @@ const getStatusColor = (status: string): string => {
 /**
  * 将动态数据保存到数据库
  */
-const saveDynamicDataToDB = (dynamicData: DynamicApiResponse) => {
+const saveDynamicDataToDB = (dynamicData: DynamicApiResponse, connectionData: ConnectionApiResponse) => {
   if (!dynamicData) return;
-
   const now = Date.now();
-  const records = [];
+  const records: Omit<HistoryRecord, 'id'>[] = [];
+
 
   // CPU 使用率
   const cpuUsage = dynamicData.cpu?.total?.usage;
   if (cpuUsage?.value !== undefined) {
     records.push({
       timestamp: now,
-      metric: 'cpu' as const,
+      metric: 'cpu_total',
       value: cpuUsage.value,
-      unit: cpuUsage.unit
+      unit: cpuUsage.unit,
+      label: 'total'
     });
   }
 
-  // CPU 温度
+  // 1. CPU Temp: 平均值
   if (dynamicData.cpu) {
     let totalTemp = 0, count = 0;
-    Object.values(dynamicData.cpu).forEach((c: any) => {
-      if (c.temperature.value > 0) {
-        totalTemp += c.temperature.value;
-        count++;
-      }
-    });
+    Object.values(dynamicData.cpu).forEach((c: any) => { if (c.temperature.value > 0) { totalTemp += c.temperature.value; count++ } });
     if (count > 0) {
       const unit = Object.values(dynamicData.cpu)[0].temperature.unit;
       records.push({
         timestamp: now,
-        metric: 'cpu_temp' as const,
+        metric: 'cpu_temp',
         value: totalTemp / count,
-        unit: unit
+        unit: unit,
+        label: 'average'
       });
     }
   }
 
-  // 内存使用率
-  const memUsage = dynamicData.memory?.used_percent;
-  if (memUsage?.value !== undefined) {
+  // 3. Memory: 内存使用量和百分比
+  if (dynamicData.memory) {
+    if (dynamicData.memory.used) {
+      const [value, unit] = covertDataBytes(dynamicData.memory.used.value, dynamicData.memory.used.unit, dynamicData.memory.total.unit);
+      records.push({
+        timestamp: now,
+        metric: 'memory_used',
+        value: value,
+        unit: unit,
+        label: 'used'
+      });
+    }
+    if (dynamicData.memory.used_percent) {
+      records.push({
+        timestamp: now,
+        metric: 'memory_used_percent',
+        value: dynamicData.memory.used_percent.value,
+        unit: dynamicData.memory.used_percent.unit,
+        label: 'percent'
+      });
+    }
+  }
+
+  // 4. Network: 总网卡 IO 和 pppoe-wan IO
+  if (dynamicData.network?.total) {
+    const totalIn = dynamicData.network.total.incoming;
+    const totalOut = dynamicData.network.total.outgoing;
     records.push({
       timestamp: now,
-      metric: 'memory' as const,
-      value: memUsage.value,
-      unit: memUsage.unit
+      metric: 'network_in',
+      value: totalIn.value,
+      unit: totalIn.unit,
+      label: 'total-down'
+    });
+    records.push({
+      timestamp: now,
+      metric: 'network_out',
+      value: totalOut.value,
+      unit: totalOut.unit,
+      label: 'total-up'
     });
   }
 
-  // 网络下行
-  const netIn = dynamicData.network?.['pppoe-wan']?.incoming;
-  if (netIn?.value !== undefined) {
+  if (dynamicData.network?.['pppoe-wan']) {
+    const pppoeIn = dynamicData.network['pppoe-wan'].incoming;
+    const pppoeOut = dynamicData.network['pppoe-wan'].outgoing;
     records.push({
       timestamp: now,
-      metric: 'network_in' as const,
-      value: normalizeToBytes(netIn.value, netIn.unit),
-      unit: 'B/S'
+      metric: 'network_in',
+      value: pppoeIn.value,
+      unit: pppoeIn.unit,
+      label: 'pppoe-wan-down'
+    });
+    records.push({
+      timestamp: now,
+      metric: 'network_out',
+      value: pppoeOut.value,
+      unit: pppoeOut.unit,
+      label: 'pppoe-wan-up'
     });
   }
 
-  // 网络上行
-  const netOut = dynamicData.network?.['pppoe-wan']?.outgoing;
-  if (netOut?.value !== undefined) {
-    records.push({
-      timestamp: now,
-      metric: 'network_out' as const,
-      value: normalizeToBytes(netOut.value, netOut.unit),
-      unit: 'B/S'
-    });
-  }
-
-  // 存储 IO
+  // 5. Storage: 总 IO
   if (dynamicData.storage) {
     let totalBytes = 0;
     Object.values(dynamicData.storage).forEach((d: any) => {
       const readBytes = normalizeToBytes(d.read.value, d.read.unit);
       const writeBytes = normalizeToBytes(d.write.value, d.write.unit);
-      if (readBytes > 0) {
-        totalBytes += readBytes;
-      }
-      if (writeBytes > 0) {
-        totalBytes += writeBytes;
-      }
+      if (readBytes > 0) totalBytes += readBytes;
+      if (writeBytes > 0) totalBytes += writeBytes;
     });
     records.push({
       timestamp: now,
-      metric: 'storage_io' as const,
+      metric: 'storage_total_io',
       value: totalBytes,
-      unit: 'B/S'
+      unit: 'B/S',
+      label: 'total'
     });
+
   }
 
-  // 存储使用率
-  const storageKeys = Object.keys(dynamicData.storage || {}).filter(k => k !== 'total');
-  if (storageKeys.length > 0) {
-    const usage = dynamicData.storage[storageKeys[0]].used_percent;
-    records.push({
-      timestamp: now,
-      metric: 'storage_usage' as const,
-      value: usage.value,
-      unit: usage.unit
-    });
+  // 6. Connections: 4条记录 (Total, TCP, UDP, Other)
+  if (connectionData?.counts) {
+    const counts = connectionData.counts;
+    records.push({ timestamp: now, metric: 'connections', value: counts.tcp, unit: 'count', label: 'TCP' });
+    records.push({ timestamp: now, metric: 'connections', value: counts.udp, unit: 'count', label: 'UDP' });
+    records.push({ timestamp: now, metric: 'connections', value: counts.other, unit: 'count', label: 'Other' });
+    records.push({ timestamp: now, metric: 'connections', value: (counts.tcp + counts.udp + counts.other), unit: 'count', label: 'Total' });
   }
 
-  // 批量保存到数据库
   if (records.length > 0) {
     addHistoryBatch(records).catch(console.error);
   }

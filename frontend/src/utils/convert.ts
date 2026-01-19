@@ -1,3 +1,7 @@
+import { UnitType } from "dayjs";
+import { number } from "echarts";
+import { numCalculate } from "echarts/types/src/component/marker/markerHelper.js";
+
 export function convertToBytes(value: number, unit: string): number {
   const unitMultipliers: { [key: string]: number } = {
     'B': 1,
@@ -12,7 +16,7 @@ export function convertToBytes(value: number, unit: string): number {
   return value * multiplier;
 }
 
-export function formatBytes(bytes: number, unit: string): string {
+export function BytesFixed(bytes: number, unit: string): string {
   if (bytes < 0) {
     return "-1";
   }
@@ -53,7 +57,7 @@ export function normalizeToBytes(value: number, unit: string): number {
 
 // 3. 格式化 ← Bytes/s（递归版，固定输出 RateUnit）
 export function formatIOBytes(bytes: number, idx = 0): string {
-  if (bytes === 0){
+  if (bytes === 0) {
     return `0 ${RATE_UNITS[0]}`;
   }
   if (idx >= RATE_UNITS.length - 1) {
@@ -65,4 +69,35 @@ export function formatIOBytes(bytes: number, idx = 0): string {
     return `${(bytes / Math.pow(1000, idx)).toFixed(2)} ${RATE_UNITS[idx]}`;
   }
   return formatIOBytes(bytes, idx + 1); // 继续往大单位走
+}
+
+// 转换DATA_UNITS单位位目标单位
+export function covertDataBytes(bytes: number, unit: string, target: string): [number, string] {
+  if (bytes === 0) {
+    return [0, DATA_UNITS[0]];
+  }
+  const idx = DATA_UNITS.indexOf(unit as DataUnit);
+  const targetIdx = DATA_UNITS.indexOf(target as DataUnit);
+  if (targetIdx === -1) return [bytes, unit];
+  if (idx === -1) return [bytes, unit];
+
+  if (unit as DataUnit === target) {
+    return [bytes, unit];
+  }
+
+  if (idx >= DATA_UNITS.length - 1) {
+    // 已最大单位
+    return [bytes, DATA_UNITS[idx]];
+  }
+
+  const diff = idx - targetIdx;
+  if (diff < 0) {
+    // 往小单位走
+    bytes = bytes / Math.pow(1000, -diff);
+  }
+  if (diff > 0) {
+    // 往大单位走
+    bytes = bytes * Math.pow(1000, diff);
+  }
+  return [bytes, DATA_UNITS[targetIdx]];
 }

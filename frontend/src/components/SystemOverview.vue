@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { reactive } from 'vue';
 import type { DynamicApiResponse, StaticApiResponse } from '../model';
-import { formatBytes } from '../utils/convert';
+import { BytesFixed } from '../utils/convert';
 
 // 定义组件接收的 props
 interface Props {
@@ -37,7 +37,7 @@ const uiState = reactive({
                 <div class="flex justify-between items-baseline mt-1">
                     <!-- 左侧：CPU使用率百分比 -->
                     <div class="text-xl font-bold">
-                        {{ formatBytes(data.dynamic.cpu.total.usage.value, data.dynamic.cpu.total.usage.unit) }}
+                        {{ BytesFixed(data.dynamic.cpu.total.usage.value, data.dynamic.cpu.total.usage.unit) }}
                         <span class="text-slate-400 text-sm">{{ data.dynamic.cpu.total.usage.unit }}</span>
                     </div>
 
@@ -72,17 +72,17 @@ const uiState = reactive({
                 <div class="flex justify-between items-baseline mt-1">
                     <!-- 左侧：百分比 -->
                     <div class="text-xl font-bold">
-                        {{ formatBytes(data.dynamic.memory.used_percent.value, data.dynamic.memory.used_percent.unit) }}
+                        {{ BytesFixed(data.dynamic.memory.used_percent.value, data.dynamic.memory.used_percent.unit) }}
                         <span class="text-slate-300 text-sm ml-0.5">{{ data.dynamic.memory.used_percent.unit }}</span>
                     </div>
 
                     <!-- 右侧：具体使用量 -->
                     <div class="text-right">
-                        <span class="font-bold">{{ formatBytes(data.dynamic.memory.used.value,
+                        <span class="font-bold">{{ BytesFixed(data.dynamic.memory.used.value,
                             data.dynamic.memory.used.unit) }}</span>
                         <span class="text-slate-300 text-sm ml-0.5">{{ data.dynamic.memory.used.unit }}</span>
                         <span class="text-slate-400 mx-1">/</span>
-                        <span class="font-bold">{{ formatBytes(data.dynamic.memory.total.value,
+                        <span class="font-bold">{{ BytesFixed(data.dynamic.memory.total.value,
                             data.dynamic.memory.total.unit) }}</span>
                         <span class="text-slate-300 text-sm ml-0.5">{{ data.dynamic.memory.total.unit }}</span>
                     </div>
@@ -104,7 +104,7 @@ const uiState = reactive({
                     <div v-if="data.dynamic.network?.['pppoe-wan']?.outgoing" class="flex items-center justify-between">
                         <div class="text-orange-500">↑ 上行</div>
                         <div class="text-xl font-bold font-mono text-orange-500">
-                            {{ formatBytes(data.dynamic.network['pppoe-wan'].outgoing.value,
+                            {{ BytesFixed(data.dynamic.network['pppoe-wan'].outgoing.value,
                                 data.dynamic.network['pppoe-wan'].outgoing.unit) }}
                             <span class="text-slate-400 text-sm">{{ data.dynamic.network['pppoe-wan'].outgoing.unit
                                 }}</span>
@@ -116,7 +116,7 @@ const uiState = reactive({
                         class="flex items-center justify-between mb-1">
                         <div class="text-cyan-500">↓ 下行</div>
                         <div class="text-xl font-bold font-mono text-cyan-500">
-                            {{ formatBytes(data.dynamic.network['pppoe-wan'].incoming.value,
+                            {{ BytesFixed(data.dynamic.network['pppoe-wan'].incoming.value,
                                 data.dynamic.network['pppoe-wan'].incoming.unit) }}
                             <span class="text-slate-400 text-sm">{{ data.dynamic.network['pppoe-wan'].incoming.unit
                                 }}</span>
@@ -132,7 +132,7 @@ const uiState = reactive({
                 <div v-if="data.dynamic.network?.['pppoe-wan']?.outgoing" class="flex items-center justify-between">
                     <div class="text-orange-500">↑ 上行</div>
                     <div class="text-xl font-bold font-mono text-orange-500">
-                        {{ formatBytes(data.dynamic.network.total.incoming.value,
+                        {{ BytesFixed(data.dynamic.network.total.incoming.value,
                             data.dynamic.network.total.incoming.unit) }}
                         <span class="text-slate-400 text-sm">{{ data.dynamic.network.total.incoming.unit
                             }}</span>
@@ -144,7 +144,7 @@ const uiState = reactive({
                     class="flex items-center justify-between mb-1">
                     <div class="text-cyan-500">↓ 下行</div>
                     <div class="text-xl font-bold font-mono text-cyan-500">
-                        {{ formatBytes(data.dynamic.network.total.outgoing.value,
+                        {{ BytesFixed(data.dynamic.network.total.outgoing.value,
                             data.dynamic.network.total.outgoing.unit) }}
                         <span class="text-slate-400 text-sm">{{ data.dynamic.network.total.outgoing.unit
                             }}</span>
@@ -181,7 +181,7 @@ const uiState = reactive({
                     <div class="flex justify-between items-center mb-4">
                         <span class="text-xl font-bold">{{ name }}</span>
                         <span class="bg-slate-700 px-2 py-0.5 rounded text-xs font-mono text-slate-300">{{
-                            formatBytes(dev.used_percent.value, dev.used_percent.unit) }}%</span>
+                            BytesFixed(dev.used_percent.value, dev.used_percent.unit) }}%</span>
                     </div>
                     <div class="grid grid-cols-3 gap-2 text-sm mb-3">
                         <div><span class="text-slate-500">读:</span> {{ dev.read.value }} <span
@@ -192,13 +192,13 @@ const uiState = reactive({
                                 {{ dev.write.unit }}</span></div>
                         <div><span class="text-slate-500"></span></div>
                         <div><span class="text-slate-500">使用量:</span> <span class="font-mono">{{
-                            formatBytes(dev.used_percent.value, dev.used_percent.unit) }} {{
+                            BytesFixed(dev.used_percent.value, dev.used_percent.unit) }} {{
                                     dev.used_percent.unit }}</span></div>
                         <div><span class="text-slate-500">总容量:</span> <span class="font-mono">{{
-                            formatBytes(dev.total.value, dev.total.unit) }} {{
+                            BytesFixed(dev.total.value, dev.total.unit) }} {{
                                     dev.total.unit }}</span></div>
                         <div><span class="text-slate-500">已用:</span> <span class="font-mono">{{
-                            formatBytes(dev.used.value, dev.used.unit) }} {{
+                            BytesFixed(dev.used.value, dev.used.unit) }} {{
                                     dev.used.unit
                                 }}</span></div>
                     </div>
@@ -223,7 +223,7 @@ const uiState = reactive({
                     class="bg-slate-800 border border-slate-700 rounded-xl p-5 transition-all hover:-translate-y-0.5 hover:shadow-xl">
                     <div class="flex justify-between mb-2">
                         <span class="text-lg font-bold">{{ name }}</span>
-                        <span class="text-lg font-bold">{{ formatBytes(core.usage.value, core.usage.unit) }}%</span>
+                        <span class="text-lg font-bold">{{ BytesFixed(core.usage.value, core.usage.unit) }}%</span>
                     </div>
                     <div class="h-1.5 bg-slate-900 rounded-full overflow-hidden mb-2">
                         <div class="h-full bg-violet-500 transition-all duration-500"
@@ -251,12 +251,12 @@ const uiState = reactive({
                     <h3 class="text-lg font-bold mb-4">总网卡流量</h3>
                     <div class="flex justify-between items-center">
                         <div class="text-xl font-bold font-mono text-cyan-500">↓ {{
-                            formatBytes(data.dynamic.network.total.incoming.value,
+                            BytesFixed(data.dynamic.network.total.incoming.value,
                                 data.dynamic.network.total.incoming.unit) }}
                             {{
                                 data.dynamic.network.total.incoming.unit }} </div>
                         <div class="text-xl font-bold font-mono text-orange-500">↑ {{
-                            formatBytes(data.dynamic.network.total.outgoing.value,
+                            BytesFixed(data.dynamic.network.total.outgoing.value,
                                 data.dynamic.network.total.outgoing.unit)
                             }} {{
                                 data.dynamic.network.total.outgoing.unit }} </div>
@@ -271,12 +271,12 @@ const uiState = reactive({
                                 class="text-slate-500 text-sm font-normal">IO</span>
                         </h3>
                         <div class="flex justify-between items-center">
-                            <div class="text-xl font-bold font-mono text-cyan-500">↓ {{ formatBytes(net.incoming.value,
+                            <div class="text-xl font-bold font-mono text-cyan-500">↓ {{ BytesFixed(net.incoming.value,
                                 net.incoming.unit) }}
                                 {{
                                     net.incoming.unit }} </div>
-                            <div class="text-xl font-bold font-mono text-orange-500">↑ {{
-                                formatBytes(net.outgoing.value, net.outgoing.unit)
+                            <div class="text-xl font-bold font-mono text-orange-500">↑ {{ BytesFixed(net.outgoing.value,
+                                net.outgoing.unit)
                                 }} {{
                                     net.outgoing.unit }} </div>
                         </div>
