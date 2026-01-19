@@ -224,7 +224,7 @@ const fetchData = async () => {
 
     // 保存动态数据到数据库
     if (enableMetricRecord.value) {
-      saveDynamicDataToDB(data.dynamic);
+      saveDynamicDataToDB(data.dynamic, data.connection);
     }
 
     uiState.status = '运行中';
