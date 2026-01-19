@@ -32,7 +32,7 @@ upx:
     brute: true
 
 checksum:
-  enabled: true
+  disable: true
 
 changelog:
   disable: false
