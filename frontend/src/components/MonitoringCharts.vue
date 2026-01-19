@@ -441,7 +441,7 @@ const loadStorageIoHistory = async (dev: string) => {
   const chartKey = `storage_io_${dev}`;
   const range = chartStates[chartKey]?.range || globalTimeRange.value;
 
-  const data = await getHistory('storage_io', range);
+  const data = await getHistory('storage_total_io', range);
 
   const seriesRead = data
     .filter(item => item.label === `${dev}-read`)

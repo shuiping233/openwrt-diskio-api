@@ -175,15 +175,14 @@ const saveDynamicDataToDB = (dynamicData: DynamicApiResponse, connectionData: Co
       if (readBytes > 0) totalBytes += readBytes;
       if (writeBytes > 0) totalBytes += writeBytes;
     });
-    if (totalBytes > 0) {
-      records.push({
-        timestamp: now,
-        metric: 'storage_io',
-        value: totalBytes,
-        unit: 'B/S',
-        label: 'total'
-      });
-    }
+    records.push({
+      timestamp: now,
+      metric: 'storage_total_io',
+      value: totalBytes,
+      unit: 'B/S',
+      label: 'total'
+    });
+
   }
 
   // 6. Connections: 4条记录 (Total, TCP, UDP, Other)
