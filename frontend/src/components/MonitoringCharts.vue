@@ -484,7 +484,7 @@ const initCpuCoreCharts = (data: DynamicApiResponse) => {
       if (key === 'total') return;
       const chartKey = `cpu_core_${key}`;
       if (!chartOptions[chartKey]) {
-        chartOptions[chartKey] = getFixedAxisOption(`CPU ${key}`, '#3b82f6', '%', 0, 100);
+        chartOptions[chartKey] = getFixedAxisOption(`${key}`, '#3b82f6', '%', 0, 100);
         if (!chartStates[chartKey]) {
           chartStates[chartKey] = { range: globalTimeRange.value };
         }
@@ -863,6 +863,11 @@ onMounted(async () => {
       <div v-show="uiState.accordions.cpu" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div v-for="[key, opt] in getCpuCoreCharts" :key="key"
           class="bg-slate-800 border border-slate-700 rounded-xl p-4 relative group">
+          <select :value="chartStates[key]?.range || globalTimeRange"
+            @change="(e) => { chartStates[key] = { range: Number((e.target as HTMLSelectElement).value) }; handleRangeChange(key); }"
+            class="absolute top-6 right-16 z-10 bg-slate-900 border border-slate-600 text-xs text-slate-300 px-2 py-1 rounded outline-none opacity-100 transition-opacity">
+            <option v-for="r in TimeRanges" :key="r.value" :value="r.value">{{ r.label }}</option>
+          </select>
           <v-chart :option="opt" :autoresize="true" style="height: 320px;" />
         </div>
       </div>
@@ -879,6 +884,11 @@ onMounted(async () => {
       <div v-show="uiState.accordions.memory" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div v-for="[key, opt] in getMemoryCharts" :key="key"
           class="bg-slate-800 border border-slate-700 rounded-xl p-4 relative group">
+          <select :value="chartStates[key]?.range || globalTimeRange"
+            @change="(e) => { chartStates[key] = { range: Number((e.target as HTMLSelectElement).value) }; handleRangeChange(key); }"
+            class="absolute top-6 right-16 z-10 bg-slate-900 border border-slate-600 text-xs text-slate-300 px-2 py-1 rounded outline-none opacity-100 transition-opacity">
+            <option v-for="r in TimeRanges" :key="r.value" :value="r.value">{{ r.label }}</option>
+          </select>
           <v-chart :option="opt" :autoresize="true" style="height: 320px;" />
         </div>
       </div>
@@ -895,6 +905,11 @@ onMounted(async () => {
       <div v-show="uiState.accordions.network" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div v-for="[key, opt] in getNetworkCharts" :key="key"
           class="bg-slate-800 border border-slate-700 rounded-xl p-4 relative group lg:col-span-2">
+          <select :value="chartStates[key]?.range || globalTimeRange"
+            @change="(e) => { chartStates[key] = { range: Number((e.target as HTMLSelectElement).value) }; handleRangeChange(key); }"
+            class="absolute top-6 right-16 z-10 bg-slate-900 border border-slate-600 text-xs text-slate-300 px-2 py-1 rounded outline-none opacity-100 transition-opacity">
+            <option v-for="r in TimeRanges" :key="r.value" :value="r.value">{{ r.label }}</option>
+          </select>
           <v-chart :option="opt" :autoresize="true" style="height: 320px;" />
         </div>
       </div>
@@ -911,6 +926,11 @@ onMounted(async () => {
       <div v-show="uiState.accordions.storage" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div v-for="[key, opt] in getStorageCharts" :key="key"
           class="bg-slate-800 border border-slate-700 rounded-xl p-4 relative group">
+          <select :value="chartStates[key]?.range || globalTimeRange"
+            @change="(e) => { chartStates[key] = { range: Number((e.target as HTMLSelectElement).value) }; handleRangeChange(key); }"
+            class="absolute top-6 right-16 z-10 bg-slate-900 border border-slate-600 text-xs text-slate-300 px-2 py-1 rounded outline-none opacity-100 transition-opacity">
+            <option v-for="r in TimeRanges" :key="r.value" :value="r.value">{{ r.label }}</option>
+          </select>
           <v-chart :option="opt" :autoresize="true" style="height: 320px;" />
         </div>
       </div>
