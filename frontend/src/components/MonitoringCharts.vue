@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted, watch, nextTick } from 'vue';
+import { ref, reactive, onMounted, watch, nextTick, computed } from 'vue';
 import VChart from 'vue-echarts';
 import { use } from 'echarts/core';
 import { CanvasRenderer } from 'echarts/renderers';
@@ -231,6 +231,37 @@ const chartOptions = reactive<Record<string, EChartsOption>>({
 
   // 内存分类 - 使用量
   memory_used: getFixedAxisOption('内存使用量', '#8b5cf6', 'B', 0, undefined),
+});
+
+// 计算属性：过滤各分类的图表
+const getBasicCharts = computed(() => {
+  return Object.entries(chartOptions).filter(([key]) =>
+    ['cpu_total', 'cpu_temp', 'memory_percent', 'connections', 'network_total', 'network_pppoe_wan', 'storage_total_io'].includes(key)
+  );
+});
+
+const getCpuCoreCharts = computed(() => {
+  return Object.entries(chartOptions).filter(([key]) =>
+    key.startsWith('cpu_core_')
+  );
+});
+
+const getMemoryCharts = computed(() => {
+  return Object.entries(chartOptions).filter(([key]) =>
+    ['memory_used', 'memory_percent'].includes(key)
+  );
+});
+
+const getNetworkCharts = computed(() => {
+  return Object.entries(chartOptions).filter(([key]) =>
+    key === 'network_iface_all'
+  );
+});
+
+const getStorageCharts = computed(() => {
+  return Object.entries(chartOptions).filter(([key]) =>
+    key.startsWith('storage_io_') || key.startsWith('storage_space_')
+  );
 });
 
 // ================= 数据加载与处理 =================
@@ -804,11 +835,10 @@ onMounted(async () => {
           :class="{ 'rotate-180': uiState.accordions.basic }">▼</span>
       </div>
       <div v-show="uiState.accordions.basic" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div v-for="(opt, key) in chartOptions" :key="key"
-          v-if="['cpu_total', 'cpu_temp', 'memory_percent', 'connections', 'network_total', 'network_pppoe_wan', 'storage_total_io'].includes(key as string)"
+        <div v-for="[key, opt] in getBasicCharts" :key="key"
           class="bg-slate-800 border border-slate-700 rounded-xl p-4 relative group">
-          <select :value="chartStates[key as string]?.range || globalTimeRange"
-            @change="(e) => { chartStates[key as string] = { range: Number((e.target as HTMLSelectElement).value) }; handleRangeChange(key as string); }"
+          <select :value="chartStates[key]?.range || globalTimeRange"
+            @change="(e) => { chartStates[key] = { range: Number((e.target as HTMLSelectElement).value) }; handleRangeChange(key); }"
             class="absolute top-6 right-16 z-10 bg-slate-900 border border-slate-600 text-xs text-slate-300 px-2 py-1 rounded outline-none opacity-100 transition-opacity">
             <option v-for="r in TimeRanges" :key="r.value" :value="r.value">{{ r.label }}</option>
           </select>
@@ -826,7 +856,7 @@ onMounted(async () => {
           :class="{ 'rotate-180': uiState.accordions.cpu }">▼</span>
       </div>
       <div v-show="uiState.accordions.cpu" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div v-for="(opt, key) in chartOptions" :key="key" v-if="(key as string).startsWith('cpu_core_')"
+        <div v-for="[key, opt] in getCpuCoreCharts" :key="key"
           class="bg-slate-800 border border-slate-700 rounded-xl p-4 relative group">
           <v-chart :option="opt" :autoresize="true" style="height: 320px;" />
         </div>
@@ -842,8 +872,7 @@ onMounted(async () => {
           :class="{ 'rotate-180': uiState.accordions.memory }">▼</span>
       </div>
       <div v-show="uiState.accordions.memory" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div v-for="(opt, key) in chartOptions" :key="key"
-          v-if="['memory_used', 'memory_percent'].includes(key as string)"
+        <div v-for="[key, opt] in getMemoryCharts" :key="key"
           class="bg-slate-800 border border-slate-700 rounded-xl p-4 relative group">
           <v-chart :option="opt" :autoresize="true" style="height: 320px;" />
         </div>
@@ -859,7 +888,7 @@ onMounted(async () => {
           :class="{ 'rotate-180': uiState.accordions.network }">▼</span>
       </div>
       <div v-show="uiState.accordions.network" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div v-for="(opt, key) in chartOptions" :key="key" v-if="(key as string) === 'network_iface_all'"
+        <div v-for="[key, opt] in getNetworkCharts" :key="key"
           class="bg-slate-800 border border-slate-700 rounded-xl p-4 relative group lg:col-span-2">
           <v-chart :option="opt" :autoresize="true" style="height: 320px;" />
         </div>
@@ -875,8 +904,7 @@ onMounted(async () => {
           :class="{ 'rotate-180': uiState.accordions.storage }">▼</span>
       </div>
       <div v-show="uiState.accordions.storage" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div v-for="(opt, key) in chartOptions" :key="key"
-          v-if="(key as string).startsWith('storage_io_') || (key as string).startsWith('storage_space_')"
+        <div v-for="[key, opt] in getStorageCharts" :key="key"
           class="bg-slate-800 border border-slate-700 rounded-xl p-4 relative group">
           <v-chart :option="opt" :autoresize="true" style="height: 320px;" />
         </div>
