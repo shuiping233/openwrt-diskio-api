@@ -189,7 +189,7 @@ function getMultiSeriesOption(title: string, series: any[], legend: boolean = tr
       type: 'value',
       scale: true,
       splitLine: { lineStyle: { color: '#334155', type: 'dashed' } },
-      axisLabel: { formatter: (value: number) => isIO ? formatIOBytes(value) : `{value}` }
+      axisLabel: { formatter: (value: number) => isIO ? formatIOBytes(value) : `${value}` }
     },
     series: series
   };
