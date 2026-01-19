@@ -57,7 +57,7 @@ const colors = [
 const defaultRange = TimeRanges[0].value;
 const globalTimeRange = ref(defaultRange);
 
-const chartStates = reactive<Record<string, { range: number }>>({});
+const chartStates = reactive<Record<string, { range: number; targetUnit?: string }>>({});
 
 // 折叠面板状态
 const uiState = reactive({
@@ -229,6 +229,10 @@ const chartOptions = reactive<Record<string, EChartsOption>>({
 
   // 存储分类 - 总 IO
   storage_total_io: getIOOption('总磁盘 IO', '#ec4899'),
+
+  // 存储分类 - 总使用量
+  memory_used: getFixedAxisOption('内存使用量', '#8b5cf6', props.data.dynamic?.memory.total.unit, 0, props.data.dynamic?.memory.total.value) // 初始最大值为0，后续动态调整
+
 });
 
 // 计算属性：过滤各分类的图表
@@ -282,8 +286,7 @@ const loadHistoryAndRender = async (key: string) => {
       const normalizedValue = normalizeToBytes(item.value, item.unit);
       return [item.timestamp, normalizedValue] as [number, number];
     });
-  }
-  else {
+  } else {
     seriesData = data.map(item => [item.timestamp, item.value] as [number, number]);
   }
 
@@ -490,18 +493,6 @@ const initCpuCoreCharts = (data: DynamicApiResponse) => {
   }
 };
 
-// 初始化内存使用量图表
-const initMemoryUsageCharts = (data: DynamicApiResponse) => {
-  if (data.memory) {
-    const chartKey = 'memory_used';
-    if (!chartOptions[chartKey]) {
-      chartOptions[chartKey] = getFixedAxisOption('内存使用量', '#8b5cf6', data.memory.total.unit, 0, data.memory.total.value);
-      if (!chartStates[chartKey]) {
-        chartStates[chartKey] = { range: globalTimeRange.value };
-      }
-    }
-  }
-};
 
 // 初始化网卡 IO 图表
 const initNetworkIfaceCharts = (data: DynamicApiResponse) => {
@@ -559,7 +550,6 @@ const appendDataPoint = (key: string, timestamp: number, value: number, unit: st
     finalValue = normalizeToBytes(value, unit);
     unit = 'B/S';
   }
-
   seriesArr.push([timestamp, finalValue]);
 
   if (seriesArr.length > 500) {
@@ -595,7 +585,6 @@ watch(() => props.data.dynamic, (newData) => {
   initCpuCoreCharts(newData);
   initNetworkIfaceCharts(newData);
   initStorageCharts(newData);
-  initMemoryUsageCharts(newData);
 
   // 基本指标 - CPU Total
   const cpuUsage = newData.cpu?.total?.usage;
