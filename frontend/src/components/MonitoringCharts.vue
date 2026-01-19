@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted, watch, nextTick, computed } from 'vue';
+import { ref, reactive, onMounted, watch, nextTick } from 'vue';
 import VChart from 'vue-echarts';
 import { use } from 'echarts/core';
 import { CanvasRenderer } from 'echarts/renderers';
@@ -45,6 +45,12 @@ const { getHistory, getAccordionState, setAccordionState } = useDatabase();
 function formatIOTooltip(value: number): string {
   return formatIOBytes(value);
 }
+
+// 颜色配置
+const colors = [
+  '#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316',
+  '#84cc16', '#14b8a6', '#6366f1', '#f43f5e', '#0ea5e9', '#d946ef', '#22c55e', '#e11d48'
+];
 
 // ================= 状态定义 =================
 const defaultRange = TimeRanges[0].value;
@@ -208,24 +214,23 @@ const chartOptions = reactive<Record<string, EChartsOption>>({
     { type: 'line', name: 'Total', showSymbol: false, data: [], lineStyle: { width: 2, color: '#3b82f6' }, smooth: false }
   ], true, false),
 
-  // CPU 分类 (动态初始化)
-  cpu_core_0: getFixedAxisOption('CPU Core 0', '#3b82f6', '%', 0, 100),
-
-  // 内存分类
-  memory_used: getFixedAxisOption('内存使用量', '#8b5cf6', 'B', 0, undefined),
-
-  // 网络分类
+  // 网络分类 - 总网卡 IO
   network_total: getMultiSeriesOption('总网卡 IO', [
     { type: 'line', name: '下行', showSymbol: false, data: [], lineStyle: { width: 2, color: '#10b981' }, areaStyle: { opacity: 0.1, color: '#10b981' }, smooth: false },
     { type: 'line', name: '上行', showSymbol: false, data: [], lineStyle: { width: 2, color: '#f97316' }, areaStyle: { opacity: 0.1, color: '#f97316' }, smooth: false }
   ], true, true),
+
+  // 网络分类 - pppoe-wan IO
   network_pppoe_wan: getMultiSeriesOption('pppoe-wan IO', [
     { type: 'line', name: '下行', showSymbol: false, data: [], lineStyle: { width: 2, color: '#10b981' }, areaStyle: { opacity: 0.1, color: '#10b981' }, smooth: false },
     { type: 'line', name: '上行', showSymbol: false, data: [], lineStyle: { width: 2, color: '#f97316' }, areaStyle: { opacity: 0.1, color: '#f97316' }, smooth: false }
   ], true, true),
 
-  // 存储分类
+  // 存储分类 - 总 IO
   storage_total_io: getIOOption('总磁盘 IO', '#ec4899'),
+
+  // 内存分类 - 使用量
+  memory_used: getFixedAxisOption('内存使用量', '#8b5cf6', 'B', 0, undefined),
 });
 
 // ================= 数据加载与处理 =================
@@ -272,142 +277,27 @@ const loadHistoryAndRenderMultiSeries = async (chartKey: string, metric: string,
   }
 };
 
-const getBasicCharts = computed(() => {
-  return Object.entries(chartOptions).filter(([key]) =>
-    ['cpu_total', 'cpu_temp', 'memory_percent', 'connections'].includes(key)
-  );
-});
-
-const getCpuCoreCharts = computed(() => {
-  return Object.entries(chartOptions).filter(([key]) =>
-    key.startsWith('cpu_core_')
-  );
-});
-
-const getMemoryCharts = computed(() => {
-  return Object.entries(chartOptions).filter(([key]) =>
-    ['memory_used', 'memory_percent'].includes(key)
-  );
-});
-
-const getNetworkCharts = computed(() => {
-  const basicNetworkCharts = ['network_total', 'network_pppoe_wan'];
-  const ifaceCharts = Object.keys(chartOptions).filter(k => k.startsWith('network_iface_'));
-  const allNetworkCharts = [...basicNetworkCharts, ...ifaceCharts];
-
-  return Object.entries(chartOptions).filter(([key]) =>
-    allNetworkCharts.includes(key)
-  );
-});
-
-const getStorageCharts = computed(() => {
-  const basicStorageCharts = ['storage_total_io'];
-  const ioCharts = Object.keys(chartOptions).filter(k => k.startsWith('storage_io_'));
-  const spaceCharts = Object.keys(chartOptions).filter(k => k.startsWith('storage_space_'));
-  const allStorageCharts = [...basicStorageCharts, ...ioCharts, ...spaceCharts];
-
-  return Object.entries(chartOptions).filter(([key]) =>
-    allStorageCharts.includes(key)
-  );
-});
-
-// ================= 多系列图表历史数据加载 =================
-
-const loadNetworkTotalHistory = async () => {
-  const chartKey = 'network_total';
-  const range = chartStates[chartKey]?.range || globalTimeRange.value;
-
-  const dataIn = await getHistory('network_in', range);
-  const dataOut = await getHistory('network_out', range);
-
-  const seriesIn = dataIn
-    .filter(item => item.label === 'total')
-    .map(item => [item.timestamp, normalizeToBytes(item.value, item.unit)] as [number, number]);
-
-  const seriesOut = dataOut
-    .filter(item => item.label === 'total')
-    .map(item => [item.timestamp, normalizeToBytes(item.value, item.unit)] as [number, number]);
-
-  const option = chartOptions[chartKey];
-  if (option && option.series) {
-    (option.series as any)[0].data = seriesIn;
-    (option.series as any)[1].data = seriesOut;
-  }
-};
-
-const loadNetworkPppoeWanHistory = async () => {
-  const chartKey = 'network_pppoe_wan';
-  const range = chartStates[chartKey]?.range || globalTimeRange.value;
-
-  const dataIn = await getHistory('network_in', range);
-  const dataOut = await getHistory('network_out', range);
-
-  const seriesIn = dataIn
-    .filter(item => item.label === 'pppoe-wan')
-    .map(item => [item.timestamp, normalizeToBytes(item.value, item.unit)] as [number, number]);
-
-  const seriesOut = dataOut
-    .filter(item => item.label === 'pppoe-wan')
-    .map(item => [item.timestamp, normalizeToBytes(item.value, item.unit)] as [number, number]);
-
-  const option = chartOptions[chartKey];
-  if (option && option.series) {
-    (option.series as any)[0].data = seriesIn;
-    (option.series as any)[1].data = seriesOut;
-  }
-};
-
-const loadNetworkIfaceHistory = async () => {
-  const chartKey = 'network_iface_all';
-  const range = chartStates[chartKey]?.range || globalTimeRange.value;
-
-  const dataIn = await getHistory('network_in', range);
-  const dataOut = await getHistory('network_out', range);
-
-  const option = chartOptions[chartKey];
-  if (!option || !option.series) return;
-
-  const interfaces = Array.from(new Set([
-    ...dataIn.map(d => d.label).filter(l => l !== 'total'),
-    ...dataOut.map(d => d.label).filter(l => l !== 'total')
-  ]));
-
-  interfaces.forEach((iface, idx) => {
-    const seriesIn = dataIn
-      .filter(item => item.label === iface)
-      .map(item => [item.timestamp, normalizeToBytes(item.value, item.unit)] as [number, number]);
-
-    const seriesOut = dataOut
-      .filter(item => item.label === iface)
-      .map(item => [item.timestamp, normalizeToBytes(item.value, item.unit)] as [number, number]);
-
-    if ((option.series as any)[idx * 2]) {
-      (option.series as any)[idx * 2].data = seriesIn;
-    }
-    if ((option.series as any)[idx * 2 + 1]) {
-      (option.series as any)[idx * 2 + 1].data = seriesOut;
-    }
-  });
-};
-
+// 加载网络连接数历史数据
 const loadConnectionsHistory = async () => {
   const chartKey = 'connections';
   const range = chartStates[chartKey]?.range || globalTimeRange.value;
 
-  const dataTcp = await getHistory('connections', range);
-  const seriesTcp = dataTcp
-    .filter(item => item.label === 'tcp')
+  const data = await getHistory('connections', range);
+
+  const seriesTcp = data
+    .filter(item => item.label === 'TCP')
     .map(item => [item.timestamp, item.value] as [number, number]);
 
-  const seriesUdp = dataTcp
-    .filter(item => item.label === 'udp')
+  const seriesUdp = data
+    .filter(item => item.label === 'UDP')
     .map(item => [item.timestamp, item.value] as [number, number]);
 
-  const seriesOther = dataTcp
-    .filter(item => item.label === 'other')
+  const seriesOther = data
+    .filter(item => item.label === 'Other')
     .map(item => [item.timestamp, item.value] as [number, number]);
 
-  const seriesTotal: [number, number][] = dataTcp
+  const seriesTotal = data
+    .filter(item => item.label === 'Total')
     .map(item => [item.timestamp, item.value] as [number, number]);
 
   const option = chartOptions[chartKey];
@@ -416,6 +306,139 @@ const loadConnectionsHistory = async () => {
     (option.series as any)[1].data = seriesUdp;
     (option.series as any)[2].data = seriesOther;
     (option.series as any)[3].data = seriesTotal;
+  }
+};
+
+// 加载总网卡IO历史数据
+const loadNetworkTotalHistory = async () => {
+  const chartKey = 'network_total';
+  const range = chartStates[chartKey]?.range || globalTimeRange.value;
+
+  const dataIn = await getHistory('network_in', range);
+  const seriesDown = dataIn
+    .filter(item => item.label === 'total-down')
+    .map(item => [item.timestamp, normalizeToBytes(item.value, item.unit)] as [number, number]);
+
+  const dataOut = await getHistory('network_out', range);
+  const seriesUp = dataOut
+    .filter(item => item.label === 'total-up')
+    .map(item => [item.timestamp, normalizeToBytes(item.value, item.unit)] as [number, number]);
+
+  const option = chartOptions[chartKey];
+  if (option && option.series) {
+    (option.series as any)[0].data = seriesDown;
+    (option.series as any)[1].data = seriesUp;
+  }
+};
+
+// 加载pppoe-wan IO历史数据
+const loadNetworkPppoeWanHistory = async () => {
+  const chartKey = 'network_pppoe_wan';
+  const range = chartStates[chartKey]?.range || globalTimeRange.value;
+
+  const dataIn = await getHistory('network_in', range);
+  const seriesDown = dataIn
+    .filter(item => item.label === 'pppoe-wan-down')
+    .map(item => [item.timestamp, normalizeToBytes(item.value, item.unit)] as [number, number]);
+
+  const dataOut = await getHistory('network_out', range);
+  const seriesUp = dataOut
+    .filter(item => item.label === 'pppoe-wan-up')
+    .map(item => [item.timestamp, normalizeToBytes(item.value, item.unit)] as [number, number]);
+
+  const option = chartOptions[chartKey];
+  if (option && option.series) {
+    (option.series as any)[0].data = seriesDown;
+    (option.series as any)[1].data = seriesUp;
+  }
+};
+
+// 加载各网卡IO历史数据
+const loadNetworkIfaceHistory = async () => {
+  const chartKey = 'network_iface_all';
+  const range = chartStates[chartKey]?.range || globalTimeRange.value;
+
+  if (!props.data.dynamic?.network) return;
+
+  const interfaces = Object.keys(props.data.dynamic.network).filter(k => k !== 'total');
+  const series: any[] = [];
+
+  const dataIn = await getHistory('network_in', range);
+  const dataOut = await getHistory('network_out', range);
+
+  interfaces.forEach((iface, idx) => {
+    const colorIdx = idx * 2;
+    const seriesDown = dataIn
+      .filter(item => item.label === `${iface}-down`)
+      .map(item => [item.timestamp, normalizeToBytes(item.value, item.unit)] as [number, number]);
+
+    const seriesUp = dataOut
+      .filter(item => item.label === `${iface}-up`)
+      .map(item => [item.timestamp, normalizeToBytes(item.value, item.unit)] as [number, number]);
+
+    series.push({
+      type: 'line',
+      name: `${iface}-下行`,
+      showSymbol: false,
+      data: seriesDown,
+      lineStyle: { width: 2, color: colors[colorIdx % colors.length] },
+      smooth: false
+    });
+
+    series.push({
+      type: 'line',
+      name: `${iface}-上行`,
+      showSymbol: false,
+      data: seriesUp,
+      lineStyle: { width: 2, color: colors[(colorIdx + 1) % colors.length] },
+      smooth: false
+    });
+  });
+
+  if (series.length > 0) {
+    chartOptions[chartKey] = getMultiSeriesOption('各网卡 IO', series, true, true);
+    if (!chartStates[chartKey]) {
+      chartStates[chartKey] = { range: globalTimeRange.value };
+    }
+  }
+};
+
+// 加载存储IO历史数据
+const loadStorageIoHistory = async (dev: string) => {
+  const chartKey = `storage_io_${dev}`;
+  const range = chartStates[chartKey]?.range || globalTimeRange.value;
+
+  const data = await getHistory('storage_io', range);
+
+  const seriesRead = data
+    .filter(item => item.label === `${dev}-read`)
+    .map(item => [item.timestamp, normalizeToBytes(item.value, item.unit)] as [number, number]);
+
+  const seriesWrite = data
+    .filter(item => item.label === `${dev}-write`)
+    .map(item => [item.timestamp, normalizeToBytes(item.value, item.unit)] as [number, number]);
+
+  const option = chartOptions[chartKey];
+  if (option && option.series) {
+    (option.series as any)[0].data = seriesRead;
+    (option.series as any)[1].data = seriesWrite;
+  }
+};
+
+// 加载存储空间历史数据
+const loadStorageSpaceHistory = async (dev: string) => {
+  const chartKey = `storage_space_${dev}`;
+  const range = chartStates[chartKey]?.range || globalTimeRange.value;
+
+  const data = await getHistory('storage_space', range);
+
+  const seriesData = data
+    .filter(item => item.label === dev)
+    .map(item => [item.timestamp, item.value] as [number, number]);
+
+  const option = chartOptions[chartKey];
+  if (option && (option.series as any)[0]) {
+    (option.series as any)[0].data = seriesData;
   }
 };
 
@@ -438,17 +461,11 @@ const initCpuCoreCharts = (data: DynamicApiResponse) => {
 };
 
 // 初始化网卡 IO 图表
-const initNetworkInterfaceCharts = (data: DynamicApiResponse) => {
+const initNetworkIfaceCharts = (data: DynamicApiResponse) => {
   if (data.network) {
-    const interfaces = Object.keys(data.network).filter(k => k !== 'total');
-    const series: any[] = [];
-    interfaces.forEach(iface => {
-      series.push({ type: 'line', name: `${iface}-下行`, showSymbol: false, data: [], lineStyle: { width: 2, color: '#10b981' }, areaStyle: { opacity: 0.1, color: '#10b981' }, smooth: false });
-      series.push({ type: 'line', name: `${iface}-上行`, showSymbol: false, data: [], lineStyle: { width: 2, color: '#f97316' }, areaStyle: { opacity: 0.1, color: '#f97316' }, smooth: false });
-    });
-    const chartKey = `network_iface_all`;
+    const chartKey = 'network_iface_all';
     if (!chartOptions[chartKey]) {
-      chartOptions[chartKey] = getMultiSeriesOption('各网卡 IO', series, true, true);
+      chartOptions[chartKey] = getMultiSeriesOption('各网卡 IO', [], true, true);
       if (!chartStates[chartKey]) {
         chartStates[chartKey] = { range: globalTimeRange.value };
       }
@@ -533,7 +550,7 @@ watch(() => props.data.dynamic, (newData) => {
   const now = Date.now();
 
   initCpuCoreCharts(newData);
-  initNetworkInterfaceCharts(newData);
+  initNetworkIfaceCharts(newData);
   initStorageCharts(newData);
 
   // 基本指标 - CPU Total
@@ -620,21 +637,34 @@ watch(() => props.data.dynamic, (newData) => {
   // 网络 - 各网卡 IO
   if (newData.network) {
     const interfaces = Object.keys(newData.network).filter(k => k !== 'total');
-    interfaces.forEach((iface, idx) => {
-      const chartKey = 'network_iface_all';
-      const net = newData.network[iface];
-      if (net?.incoming?.value !== undefined) {
-        const value = normalizeToBytes(net.incoming.value, net.incoming.unit);
-        appendDataPointMultiSeries(chartKey, idx * 2, now, value);
-      }
-      if (net?.outgoing?.value !== undefined) {
-        const value = normalizeToBytes(net.outgoing.value, net.outgoing.unit);
-        appendDataPointMultiSeries(chartKey, idx * 2 + 1, now, value);
-      }
-    });
+    const chartKey = 'network_iface_all';
+    if (chartOptions[chartKey]) {
+      const series = (chartOptions[chartKey].series as any[]);
+      interfaces.forEach((iface, idx) => {
+        const net = newData.network[iface];
+        if (net?.incoming?.value !== undefined) {
+          const value = normalizeToBytes(net.incoming.value, net.incoming.unit);
+          if (series[idx * 2]) {
+            const seriesArr = series[idx * 2].data as [number, number][];
+            seriesArr.push([now, value]);
+            if (seriesArr.length > 500) seriesArr.shift();
+            const range = chartStates[chartKey]?.range || globalTimeRange.value;
+            series[idx * 2].data = filterDataByTimeRange(seriesArr, range);
+          }
+        }
+        if (net?.outgoing?.value !== undefined) {
+          const value = normalizeToBytes(net.outgoing.value, net.outgoing.unit);
+          if (series[idx * 2 + 1]) {
+            const seriesArr = series[idx * 2 + 1].data as [number, number][];
+            seriesArr.push([now, value]);
+            if (seriesArr.length > 500) seriesArr.shift();
+            const range = chartStates[chartKey]?.range || globalTimeRange.value;
+            series[idx * 2 + 1].data = filterDataByTimeRange(seriesArr, range);
+          }
+        }
+      });
+    }
   }
-
-  // 网络 - 连接数（已经在基本指标中处理）
 
   // 存储 - 总 IO
   if (newData.storage) {
@@ -672,38 +702,20 @@ watch(() => props.data.dynamic, (newData) => {
 // ================= UI 交互 =================
 
 const handleRangeChange = async (key: string) => {
-  await loadHistoryAndRender(key);
-
-  if (key === 'network_total' || key === 'network_pppoe_wan' || key === 'connections') {
-    if (key === 'network_total') await loadNetworkTotalHistory();
-    if (key === 'network_pppoe_wan') await loadNetworkPppoeWanHistory();
-    if (key === 'connections') await loadConnectionsHistory();
-  }
-
-  if (key === 'network_iface_all') {
-    await loadNetworkIfaceHistory();
-  }
-
-  if (key.startsWith('storage_io_')) {
+  if (key === 'network_total') await loadNetworkTotalHistory();
+  else if (key === 'network_pppoe_wan') await loadNetworkPppoeWanHistory();
+  else if (key === 'connections') await loadConnectionsHistory();
+  else if (key === 'network_iface_all') await loadNetworkIfaceHistory();
+  else if (key.startsWith('storage_io_')) {
     const storageKey = key.replace('storage_io_', '');
-    const range = chartStates[key]?.range || globalTimeRange.value;
-
-    const dataIn = await getHistory('storage_io', range);
-    const dataOut = await getHistory('storage_io', range);
-
-    const seriesRead = dataIn
-      .filter(item => item.label === storageKey)
-      .map(item => [item.timestamp, normalizeToBytes(item.value, item.unit)] as [number, number]);
-
-    const seriesWrite = dataOut
-      .filter(item => item.label === storageKey)
-      .map(item => [item.timestamp, normalizeToBytes(item.value, item.unit)] as [number, number]);
-
-    const option = chartOptions[key];
-    if (option && option.series) {
-      (option.series as any)[0].data = seriesRead;
-      (option.series as any)[1].data = seriesWrite;
-    }
+    await loadStorageIoHistory(storageKey);
+  }
+  else if (key.startsWith('storage_space_')) {
+    const storageKey = key.replace('storage_space_', '');
+    await loadStorageSpaceHistory(storageKey);
+  }
+  else {
+    await loadHistoryAndRender(key);
   }
 };
 
@@ -711,48 +723,57 @@ const handleGlobalRangeChange = async () => {
   Object.keys(chartStates).forEach(key => {
     chartStates[key].range = globalTimeRange.value;
   });
-  Object.keys(chartOptions).forEach(key => loadHistoryAndRender(key));
+
+  await loadConnectionsHistory();
   await loadNetworkTotalHistory();
   await loadNetworkPppoeWanHistory();
   await loadNetworkIfaceHistory();
-  await loadConnectionsHistory();
 
-  const storageIOChartKeys = Object.keys(chartOptions).filter(k => k.startsWith('storage_io_'));
-  for (const chartKey of storageIOChartKeys) {
-    const key = chartKey.replace('storage_io_', '');
-    const range = chartStates[chartKey]?.range || globalTimeRange.value;
-
-    const dataIn = await getHistory('storage_io', range);
-    const dataOut = await getHistory('storage_io', range);
-
-    const seriesRead = dataIn
-      .filter(item => item.label === key)
-      .map(item => [item.timestamp, normalizeToBytes(item.value, item.unit)] as [number, number]);
-
-    const seriesWrite = dataOut
-      .filter(item => item.label === key)
-      .map(item => [item.timestamp, normalizeToBytes(item.value, item.unit)] as [number, number]);
-
-    const option = chartOptions[chartKey];
-    if (option && option.series) {
-      (option.series as any)[0].data = seriesRead;
-      (option.series as any)[1].data = seriesWrite;
+  Object.keys(chartOptions).forEach(key => {
+    if (key.startsWith('storage_io_')) {
+      const storageKey = key.replace('storage_io_', '');
+      loadStorageIoHistory(storageKey);
+    } else if (key.startsWith('storage_space_')) {
+      const storageKey = key.replace('storage_space_', '');
+      loadStorageSpaceHistory(storageKey);
+    } else if (!['connections', 'network_total', 'network_pppoe_wan', 'network_iface_all'].includes(key)) {
+      loadHistoryAndRender(key);
     }
-  }
-
-  const storageSpaceChartKeys = Object.keys(chartOptions).filter(k => k.startsWith('storage_space_'));
-  for (const chartKey of storageSpaceChartKeys) {
-    await loadHistoryAndRender(chartKey);
-  }
+  });
 };
 
 onMounted(async () => {
   await nextTick();
-  Object.keys(chartOptions).forEach(k => loadHistoryAndRender(k));
+
+  // 加载基本指标
+  await loadHistoryAndRender('cpu_total');
+  await loadHistoryAndRender('cpu_temp');
+  await loadHistoryAndRender('memory_percent');
+  await loadConnectionsHistory();
+
+  // 加载网络数据
   await loadNetworkTotalHistory();
   await loadNetworkPppoeWanHistory();
   await loadNetworkIfaceHistory();
-  await loadConnectionsHistory();
+
+  // 加载存储数据
+  await loadHistoryAndRender('storage_total_io');
+
+  // 加载CPU核心数据
+  Object.keys(chartOptions).filter(k => k.startsWith('cpu_core_')).forEach(k => loadHistoryAndRender(k));
+
+  // 加载内存使用量
+  await loadHistoryAndRender('memory_used');
+
+  // 加载存储IO和空间
+  Object.keys(chartOptions).filter(k => k.startsWith('storage_io_')).forEach(k => {
+    const storageKey = k.replace('storage_io_', '');
+    loadStorageIoHistory(storageKey);
+  });
+  Object.keys(chartOptions).filter(k => k.startsWith('storage_space_')).forEach(k => {
+    const storageKey = k.replace('storage_space_', '');
+    loadStorageSpaceHistory(storageKey);
+  });
 });
 </script>
 
@@ -783,10 +804,11 @@ onMounted(async () => {
           :class="{ 'rotate-180': uiState.accordions.basic }">▼</span>
       </div>
       <div v-show="uiState.accordions.basic" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div v-for="[key, opt] in getBasicCharts" :key="key"
+        <div v-for="(opt, key) in chartOptions" :key="key"
+          v-if="['cpu_total', 'cpu_temp', 'memory_percent', 'connections', 'network_total', 'network_pppoe_wan', 'storage_total_io'].includes(key as string)"
           class="bg-slate-800 border border-slate-700 rounded-xl p-4 relative group">
-          <select :value="chartStates[key]?.range || globalTimeRange"
-            @change="(e) => { chartStates[key] = { range: Number((e.target as HTMLSelectElement).value) }; handleRangeChange(key); }"
+          <select :value="chartStates[key as string]?.range || globalTimeRange"
+            @change="(e) => { chartStates[key as string] = { range: Number((e.target as HTMLSelectElement).value) }; handleRangeChange(key as string); }"
             class="absolute top-6 right-16 z-10 bg-slate-900 border border-slate-600 text-xs text-slate-300 px-2 py-1 rounded outline-none opacity-100 transition-opacity">
             <option v-for="r in TimeRanges" :key="r.value" :value="r.value">{{ r.label }}</option>
           </select>
@@ -804,13 +826,8 @@ onMounted(async () => {
           :class="{ 'rotate-180': uiState.accordions.cpu }">▼</span>
       </div>
       <div v-show="uiState.accordions.cpu" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div v-for="[key, opt] in getCpuCoreCharts" :key="key"
+        <div v-for="(opt, key) in chartOptions" :key="key" v-if="(key as string).startsWith('cpu_core_')"
           class="bg-slate-800 border border-slate-700 rounded-xl p-4 relative group">
-          <select :value="chartStates[key]?.range || globalTimeRange"
-            @change="(e) => { chartStates[key] = { range: Number((e.target as HTMLSelectElement).value) }; handleRangeChange(key); }"
-            class="absolute top-6 right-16 z-10 bg-slate-900 border border-slate-600 text-xs text-slate-300 px-2 py-1 rounded outline-none opacity-100 transition-opacity">
-            <option v-for="r in TimeRanges" :key="r.value" :value="r.value">{{ r.label }}</option>
-          </select>
           <v-chart :option="opt" :autoresize="true" style="height: 320px;" />
         </div>
       </div>
@@ -825,13 +842,9 @@ onMounted(async () => {
           :class="{ 'rotate-180': uiState.accordions.memory }">▼</span>
       </div>
       <div v-show="uiState.accordions.memory" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div v-for="[key, opt] in getMemoryCharts" :key="key"
+        <div v-for="(opt, key) in chartOptions" :key="key"
+          v-if="['memory_used', 'memory_percent'].includes(key as string)"
           class="bg-slate-800 border border-slate-700 rounded-xl p-4 relative group">
-          <select :value="chartStates[key]?.range || globalTimeRange"
-            @change="(e) => { chartStates[key] = { range: Number((e.target as HTMLSelectElement).value) }; handleRangeChange(key); }"
-            class="absolute top-6 right-16 z-10 bg-slate-900 border border-slate-600 text-xs text-slate-300 px-2 py-1 rounded outline-none opacity-100 transition-opacity">
-            <option v-for="r in TimeRanges" :key="r.value" :value="r.value">{{ r.label }}</option>
-          </select>
           <v-chart :option="opt" :autoresize="true" style="height: 320px;" />
         </div>
       </div>
@@ -846,13 +859,8 @@ onMounted(async () => {
           :class="{ 'rotate-180': uiState.accordions.network }">▼</span>
       </div>
       <div v-show="uiState.accordions.network" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div v-for="[key, opt] in getNetworkCharts" :key="key"
-          class="bg-slate-800 border border-slate-700 rounded-xl p-4 relative group">
-          <select :value="chartStates[key]?.range || globalTimeRange"
-            @change="(e) => { chartStates[key] = { range: Number((e.target as HTMLSelectElement).value) }; handleRangeChange(key); }"
-            class="absolute top-6 right-16 z-10 bg-slate-900 border border-slate-600 text-xs text-slate-300 px-2 py-1 rounded outline-none opacity-100 transition-opacity">
-            <option v-for="r in TimeRanges" :key="r.value" :value="r.value">{{ r.label }}</option>
-          </select>
+        <div v-for="(opt, key) in chartOptions" :key="key" v-if="(key as string) === 'network_iface_all'"
+          class="bg-slate-800 border border-slate-700 rounded-xl p-4 relative group lg:col-span-2">
           <v-chart :option="opt" :autoresize="true" style="height: 320px;" />
         </div>
       </div>
@@ -867,18 +875,13 @@ onMounted(async () => {
           :class="{ 'rotate-180': uiState.accordions.storage }">▼</span>
       </div>
       <div v-show="uiState.accordions.storage" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div v-for="[key, opt] in getStorageCharts" :key="key"
+        <div v-for="(opt, key) in chartOptions" :key="key"
+          v-if="(key as string).startsWith('storage_io_') || (key as string).startsWith('storage_space_')"
           class="bg-slate-800 border border-slate-700 rounded-xl p-4 relative group">
-          <select :value="chartStates[key]?.range || globalTimeRange"
-            @change="(e) => { chartStates[key] = { range: Number((e.target as HTMLSelectElement).value) }; handleRangeChange(key); }"
-            class="absolute top-6 right-16 z-10 bg-slate-900 border border-slate-600 text-xs text-slate-300 px-2 py-1 rounded outline-none opacity-100 transition-opacity">
-            <option v-for="r in TimeRanges" :key="r.value" :value="r.value">{{ r.label }}</option>
-          </select>
           <v-chart :option="opt" :autoresize="true" style="height: 320px;" />
         </div>
       </div>
     </div>
-
   </div>
 </template>
 
