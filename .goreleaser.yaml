@@ -32,8 +32,30 @@ upx:
     brute: true
 
 checksum:
-  disable: true
+  enabled: true
+
 changelog:
-  disable: true
+  disable: false
+  use: github   # 也可以改成 git 或 github，区别见文末备注
+
+  title: "Release Notes"
+  groups:
+    - title: Features
+      regexp: "^feat.*"
+      order: 0
+    - title: Bug fixes
+      regexp: "^fix.*"
+      order: 1
+    - title: Code refacotoring
+      regexp: "^refactor.*"
+      order: 2
+
+  filters:
+    exclude:
+      - "^test:"
+      - "^chore:"
+      - "^style:"
+      - "^docs:"
+
 # release:
 #   disable: true
