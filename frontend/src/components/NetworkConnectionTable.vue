@@ -23,10 +23,126 @@ const props = defineProps<{
 // 全局搜索词
 const globalFilter = ref('');
 
+// 存储上一次的数据，用于检测变化
+const previousData = ref<Map<string, any>>(new Map());
+// 存储高亮状态：行ID -> 高亮颜色类型
+const highlightRows = ref<Map<string, string>>(new Map());
+// 存储单元格高亮状态：单元格ID -> 高亮类型
+const highlightCells = ref<Map<string, string>>(new Map());
+
+// 生成行的唯一ID
+const generateRowId = (row: any): string => {
+  const endpointA = `${row.source_ip}:${row.source_port}`;
+  const endpointB = `${row.destination_ip}:${row.destination_port}`;
+  const endpoints = [endpointA, endpointB].sort();
+  return `${endpoints[0]}<->${endpoints[1]}-${row.protocol}`;
+};
+
+// 检测数值变化并设置高亮
+const detectChanges = (currentData: any[]) => {
+  const newPreviousData = new Map<string, any>();
+  const newHighlightRows = new Map<string, string>();
+  const newHighlightCells = new Map<string, string>();
+
+  currentData.forEach((row) => {
+    const rowId = generateRowId(row);
+    const prevRow = previousData.value.get(rowId);
+
+    if (prevRow) {
+      // 检测流量变化
+      const trafficChanged = row.traffic?.value !== prevRow.traffic?.value ||
+                            row.traffic?.unit !== prevRow.traffic?.unit;
+      // 检测包数变化
+      const packetsChanged = row.packets !== prevRow.packets;
+      // 检测状态变化
+      const stateChanged = row.state !== prevRow.state;
+
+      // 流量变化只高亮单元格，不高亮整行
+      if (trafficChanged) {
+        newHighlightCells.set(`${rowId}-traffic`, 'traffic');
+      }
+
+      // 包数变化只高亮单元格，使用柔和绿色
+      if (packetsChanged) {
+        newHighlightCells.set(`${rowId}-packets`, 'packets');
+      }
+
+      // 状态变化只高亮单元格
+      if (stateChanged) {
+        newHighlightCells.set(`${rowId}-state`, 'state');
+      }
+    }
+
+    newPreviousData.set(rowId, { ...row });
+  });
+
+  // 检测消失的行（连接断开）
+  previousData.value.forEach((prevRow, rowId) => {
+    if (!newPreviousData.has(rowId)) {
+      // 连接断开，可以在这里处理
+    }
+  });
+
+  // 检测新增的行（新连接）- 只高亮整行，不具体到单元格
+  currentData.forEach((row) => {
+    const rowId = generateRowId(row);
+    if (!previousData.value.has(rowId)) {
+      newHighlightRows.set(rowId, 'new');
+    }
+  });
+
+  previousData.value = newPreviousData;
+  highlightRows.value = newHighlightRows;
+  highlightCells.value = newHighlightCells;
+
+  // 1.5秒后清除高亮
+  setTimeout(() => {
+    highlightRows.value.clear();
+    highlightCells.value.clear();
+  }, 1500);
+};
+
 
 watch(globalFilter, (newFilter) => {
   table.setGlobalFilter(newFilter);
 });
+
+// 监听数据变化，检测改动并设置高亮
+watch(() => props.connectionData, (newData, oldData) => {
+  if (newData?.connections) {
+    detectChanges(newData.connections);
+  }
+}, { deep: true });
+
+// 获取行的高亮类名
+const getRowHighlightClass = (rowId: string): string => {
+  const highlightType = highlightRows.value.get(rowId);
+  if (!highlightType) return '';
+
+  switch (highlightType) {
+    case 'new':
+      return 'row-highlight-new';
+    default:
+      return '';
+  }
+};
+
+// 获取单元格高亮类名
+const getCellHighlightClass = (cellId: string): string => {
+  const highlightType = highlightCells.value.get(cellId);
+  if (!highlightType) return '';
+
+  switch (highlightType) {
+    case 'traffic':
+      return 'cell-highlight-traffic';
+    case 'packets':
+      return 'cell-highlight-packets';
+    case 'state':
+      return 'cell-highlight-state';
+    default:
+      return '';
+  }
+};
 
 const displayData = computed(() => {
   const list = props.connectionData?.connections || [];
@@ -409,8 +525,10 @@ const table = useVueTable({
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-700">
-            <tr v-for="row in table.getRowModel().rows" :key="row.id" class="hover:bg-slate-700/30 transition-colors">
-              <td v-for="cell in row.getVisibleCells()" :key="cell.id" class="px-3 py-2 text-center">
+            <tr v-for="row in table.getRowModel().rows" :key="row.id"
+                :class="[getRowHighlightClass(generateRowId(row.original)), 'hover:bg-slate-700/30 transition-all duration-300']">
+              <td v-for="cell in row.getVisibleCells()" :key="cell.id"
+                  :class="['px-3 py-2 text-center transition-all duration-500', getCellHighlightClass(`${generateRowId(row.original)}-${cell.column.id}`)]">
                 <FlexRender :render="cell.column.columnDef.cell" :props="cell.getContext()" />
               </td>
             </tr>
@@ -423,3 +541,81 @@ const table = useVueTable({
     </div>
   </div>
 </template>
+
+<style scoped>
+/* 行高亮动画 - 新连接（柔和蓝绿色） */
+.row-highlight-new {
+  animation: highlightNew 1.5s ease-out;
+}
+
+/* 单元格高亮 - 流量变化（柔和绿色） */
+.cell-highlight-traffic {
+  animation: highlightTraffic 1.5s ease-out;
+}
+
+/* 单元格高亮 - 包数变化（柔和绿色） */
+.cell-highlight-packets {
+  animation: highlightPackets 1.5s ease-out;
+}
+
+/* 单元格高亮 - 状态变化（柔和琥珀色） */
+.cell-highlight-state {
+  animation: highlightState 1.5s ease-out;
+}
+
+@keyframes highlightNew {
+  0% {
+    background-color: rgba(94, 179, 163, 0.35);
+    box-shadow: inset 0 0 15px rgba(94, 179, 163, 0.25);
+  }
+  50% {
+    background-color: rgba(94, 179, 163, 0.18);
+  }
+  100% {
+    background-color: transparent;
+    box-shadow: none;
+  }
+}
+
+@keyframes highlightTraffic {
+  0% {
+    background-color: rgba(134, 179, 129, 0.4);
+    box-shadow: inset 0 0 12px rgba(134, 179, 129, 0.3);
+  }
+  50% {
+    background-color: rgba(134, 179, 129, 0.2);
+  }
+  100% {
+    background-color: transparent;
+    box-shadow: none;
+  }
+}
+
+@keyframes highlightPackets {
+  0% {
+    background-color: rgba(144, 190, 139, 0.35);
+    box-shadow: inset 0 0 12px rgba(144, 190, 139, 0.25);
+  }
+  50% {
+    background-color: rgba(144, 190, 139, 0.18);
+  }
+  100% {
+    background-color: transparent;
+    box-shadow: none;
+  }
+}
+
+@keyframes highlightState {
+  0% {
+    background-color: rgba(202, 174, 120, 0.35);
+    box-shadow: inset 0 0 12px rgba(202, 174, 120, 0.25);
+  }
+  50% {
+    background-color: rgba(202, 174, 120, 0.18);
+  }
+  100% {
+    background-color: transparent;
+    box-shadow: none;
+  }
+}
+</style>
