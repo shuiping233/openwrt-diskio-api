@@ -4,12 +4,16 @@
 package metric
 
 import (
+	"sync"
 	"time"
 
 	"openwrt-diskio-api/backend/model"
 )
 
 type BackgroundService struct {
+	MutexStatic             sync.RWMutex
+	MutexDynamic            sync.RWMutex
+	MutexNetwork            sync.RWMutex
 	StaticMetric            *model.StaticMetric
 	DynamicMetric           *model.DynamicMetric
 	NetworkConnectionMetric *model.NetworkConnectionMetric
@@ -31,10 +35,12 @@ func (b *BackgroundService) UpdateStaticMetric(
 		staticSystemMetric := ReadStaticSystemMetric(b.Reader, b.Runner)
 		staticNetworkMetric := ReadStaticNetworkMetric(b.Reader, b.Runner)
 
+		b.MutexStatic.Lock()
 		b.StaticMetric = &model.StaticMetric{
 			Network: staticNetworkMetric,
 			System:  staticSystemMetric,
 		}
+		b.MutexStatic.Unlock()
 
 		prevTime = currTime
 
@@ -65,6 +71,7 @@ func (b *BackgroundService) UpdateDynamicMetric(
 		memoryMetric := ReadMemoryMetric(b.Reader)
 		systemMetric := ReadSystemMetric(b.Reader)
 
+		b.MutexDynamic.Lock()
 		b.DynamicMetric = &model.DynamicMetric{
 			Cpu:     cpuMetric,
 			Memory:  memoryMetric,
@@ -72,6 +79,8 @@ func (b *BackgroundService) UpdateDynamicMetric(
 			Storage: storageMetric,
 			System:  systemMetric,
 		}
+		b.MutexDynamic.Unlock()
+
 		prevTime = currTime
 
 		time.Sleep(time.Duration(updateInterval) * time.Second)
@@ -94,7 +103,9 @@ func (b *BackgroundService) UpdateNetworkConnectionDetails(
 		networkConnectionMetric := &model.NetworkConnectionMetric{}
 		ReadConnectionMetric(b.Reader, networkConnectionMetric, privateCidr)
 
+		b.MutexNetwork.Lock()
 		b.NetworkConnectionMetric = networkConnectionMetric
+		b.MutexNetwork.Unlock()
 
 		prevTime = currTime
 

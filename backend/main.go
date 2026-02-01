@@ -37,7 +37,11 @@ func DynamicMetricHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(background.DynamicMetric)
+
+	background.MutexDynamic.RLock()
+	dynamicMetric := background.DynamicMetric
+	background.MutexDynamic.RUnlock()
+	json.NewEncoder(w).Encode(dynamicMetric)
 }
 func NetworkConnectionMetricHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -46,25 +50,32 @@ func NetworkConnectionMetricHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(background.NetworkConnectionMetric)
+
+	background.MutexNetwork.RLock()
+	networkConnectionMetric := background.NetworkConnectionMetric
+	background.MutexNetwork.RUnlock()
+	json.NewEncoder(w).Encode(networkConnectionMetric)
 }
 func StaticMetricHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "only GET", http.StatusMethodNotAllowed)
 		return
 	}
-
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(background.StaticMetric)
+
+	background.MutexStatic.RLock()
+	staticMetric := background.StaticMetric
+	background.MutexStatic.RUnlock()
+	json.NewEncoder(w).Encode(staticMetric)
 }
 
 func main() {
 	var (
 		host                      = flag.String("host", "127.0.0.1", "listen host")
 		port                      = flag.Int("port", 8080, "listen port")
-		dynamicMetricInterval     = *flag.Uint("dynamic-metric-interval", 1, " metric update interval")
-		networkConnectionInterval = *flag.Uint("network-connection-interval", 10, " network connection details update interval")
-		staticMetricInterval      = *flag.Uint("static-metric-interval", 60, " metric update interval")
+		dynamicMetricInterval     = flag.Uint("dynamic-metric-interval", 1, " metric update interval")
+		networkConnectionInterval = flag.Uint("network-connection-interval", 10, " network connection details update interval")
+		staticMetricInterval      = flag.Uint("static-metric-interval", 60, " metric update interval")
 	)
 	flag.Parse()
 
@@ -75,9 +86,9 @@ func main() {
 	log.Printf("networkConnectionInterval : %v", networkConnectionInterval)
 	log.Printf("staticMetricInterval : %v", staticMetricInterval)
 
-	go background.UpdateDynamicMetric(dynamicMetricInterval)
-	go background.UpdateNetworkConnectionDetails(networkConnectionInterval)
-	go background.UpdateStaticMetric(staticMetricInterval)
+	go background.UpdateDynamicMetric(*dynamicMetricInterval)
+	go background.UpdateNetworkConnectionDetails(*networkConnectionInterval)
+	go background.UpdateStaticMetric(*staticMetricInterval)
 
 	webFS, _ := fs.Sub(frontend.WebEmb, "dist/frontend")
 	http.Handle("/", http.FileServer(http.FS(webFS)))
