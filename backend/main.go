@@ -4,7 +4,6 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"io/fs"
 	"log"
@@ -15,6 +14,7 @@ import (
 	"openwrt-diskio-api/backend/metric"
 	"openwrt-diskio-api/backend/model"
 
+	"github.com/bytedance/sonic"
 	"github.com/spf13/afero"
 )
 
@@ -41,7 +41,13 @@ func DynamicMetricHandler(w http.ResponseWriter, r *http.Request) {
 	background.MutexDynamic.RLock()
 	dynamicMetric := background.DynamicMetric
 	background.MutexDynamic.RUnlock()
-	json.NewEncoder(w).Encode(dynamicMetric)
+
+	data, err := sonic.Marshal(dynamicMetric)
+	if err != nil {
+		http.Error(w, "error", http.StatusInternalServerError)
+		return
+	}
+	w.Write(data)
 }
 func NetworkConnectionMetricHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -54,7 +60,14 @@ func NetworkConnectionMetricHandler(w http.ResponseWriter, r *http.Request) {
 	background.MutexNetwork.RLock()
 	networkConnectionMetric := background.NetworkConnectionMetric
 	background.MutexNetwork.RUnlock()
-	json.NewEncoder(w).Encode(networkConnectionMetric)
+
+	data, err := sonic.Marshal(networkConnectionMetric)
+	if err != nil {
+		http.Error(w, "error", http.StatusInternalServerError)
+		return
+	}
+	w.Write(data)
+
 }
 func StaticMetricHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -66,7 +79,13 @@ func StaticMetricHandler(w http.ResponseWriter, r *http.Request) {
 	background.MutexStatic.RLock()
 	staticMetric := background.StaticMetric
 	background.MutexStatic.RUnlock()
-	json.NewEncoder(w).Encode(staticMetric)
+
+	data, err := sonic.Marshal(staticMetric)
+	if err != nil {
+		http.Error(w, "error", http.StatusInternalServerError)
+		return
+	}
+	w.Write(data)
 }
 
 func main() {
