@@ -37,7 +37,6 @@ checksum:
 changelog:
   use: github   # 也可以改成 git 或 github，区别见文末备注
 
-  title: "Release Notes"
   groups:
     - title: Features
       regexp: "^feat.*"
