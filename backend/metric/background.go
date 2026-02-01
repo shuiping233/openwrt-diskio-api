@@ -10,6 +10,12 @@ import (
 	"openwrt-diskio-api/backend/model"
 )
 
+var connectionMetricPool = sync.Pool{
+	New: func() interface{} {
+		return &model.NetworkConnectionMetric{}
+	},
+}
+
 type BackgroundService struct {
 	MutexStatic             sync.RWMutex
 	MutexDynamic            sync.RWMutex
@@ -100,7 +106,8 @@ func (b *BackgroundService) UpdateNetworkConnectionDetails(
 
 		privateCidr := ReadPrivateIpv4Addresses(b.Runner)
 
-		networkConnectionMetric := &model.NetworkConnectionMetric{}
+		networkConnectionMetric := connectionMetricPool.Get().(*model.NetworkConnectionMetric)
+		networkConnectionMetric.Details = networkConnectionMetric.Details[:0]
 		ReadConnectionMetric(b.Reader, networkConnectionMetric, privateCidr)
 
 		b.MutexNetwork.Lock()
