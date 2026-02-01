@@ -41,7 +41,7 @@ func DynamicMetricHandler(w http.ResponseWriter, r *http.Request) {
 	background.MutexDynamic.RLock()
 	dynamicMetric := background.DynamicMetric
 	background.MutexDynamic.RUnlock()
-	json.NewEncoder(w).Encode(dynamicMetric)
+	_ = json.NewEncoder(w).Encode(dynamicMetric)
 }
 func NetworkConnectionMetricHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -54,7 +54,7 @@ func NetworkConnectionMetricHandler(w http.ResponseWriter, r *http.Request) {
 	background.MutexNetwork.RLock()
 	networkConnectionMetric := background.NetworkConnectionMetric
 	background.MutexNetwork.RUnlock()
-	json.NewEncoder(w).Encode(networkConnectionMetric)
+	_ = json.NewEncoder(w).Encode(networkConnectionMetric)
 }
 func StaticMetricHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -66,7 +66,7 @@ func StaticMetricHandler(w http.ResponseWriter, r *http.Request) {
 	background.MutexStatic.RLock()
 	staticMetric := background.StaticMetric
 	background.MutexStatic.RUnlock()
-	json.NewEncoder(w).Encode(staticMetric)
+	_ = json.NewEncoder(w).Encode(staticMetric)
 }
 
 func main() {
