@@ -4,19 +4,16 @@
 package metric
 
 import (
-	"sync"
+	"sync/atomic"
 	"time"
 
 	"openwrt-diskio-api/backend/model"
 )
 
 type BackgroundService struct {
-	MutexStatic             sync.RWMutex
-	MutexDynamic            sync.RWMutex
-	MutexNetwork            sync.RWMutex
-	StaticMetric            *model.StaticMetric
-	DynamicMetric           *model.DynamicMetric
-	NetworkConnectionMetric *model.NetworkConnectionMetric
+	StaticMetric            atomic.Pointer[model.StaticMetric]
+	DynamicMetric           atomic.Pointer[model.DynamicMetric]
+	NetworkConnectionMetric atomic.Pointer[model.NetworkConnectionMetric]
 	Reader                  FsReaderInterface
 	Runner                  CommandRunnerInterface
 }
@@ -35,12 +32,10 @@ func (b *BackgroundService) UpdateStaticMetric(
 		staticSystemMetric := ReadStaticSystemMetric(b.Reader, b.Runner)
 		staticNetworkMetric := ReadStaticNetworkMetric(b.Reader, b.Runner)
 
-		b.MutexStatic.Lock()
-		b.StaticMetric = &model.StaticMetric{
+		b.StaticMetric.Store(&model.StaticMetric{
 			Network: staticNetworkMetric,
 			System:  staticSystemMetric,
-		}
-		b.MutexStatic.Unlock()
+		})
 
 		prevTime = currTime
 
@@ -71,15 +66,13 @@ func (b *BackgroundService) UpdateDynamicMetric(
 		memoryMetric := ReadMemoryMetric(b.Reader)
 		systemMetric := ReadSystemMetric(b.Reader)
 
-		b.MutexDynamic.Lock()
-		b.DynamicMetric = &model.DynamicMetric{
+		b.DynamicMetric.Store(&model.DynamicMetric{
 			Cpu:     cpuMetric,
 			Memory:  memoryMetric,
 			Network: networkMetric,
 			Storage: storageMetric,
 			System:  systemMetric,
-		}
-		b.MutexDynamic.Unlock()
+		})
 
 		prevTime = currTime
 
@@ -103,9 +96,7 @@ func (b *BackgroundService) UpdateNetworkConnectionDetails(
 		networkConnectionMetric := &model.NetworkConnectionMetric{}
 		ReadConnectionMetric(b.Reader, networkConnectionMetric, privateCidr)
 
-		b.MutexNetwork.Lock()
-		b.NetworkConnectionMetric = networkConnectionMetric
-		b.MutexNetwork.Unlock()
+		b.NetworkConnectionMetric.Store(networkConnectionMetric)
 
 		prevTime = currTime
 

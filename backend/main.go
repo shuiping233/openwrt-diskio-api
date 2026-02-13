@@ -22,11 +22,8 @@ var (
 	reader     = metric.FsReader{Fs: afero.NewOsFs()}
 	runner     = metric.CommandRunner{}
 	background = metric.BackgroundService{
-		StaticMetric:            &model.StaticMetric{},
-		DynamicMetric:           &model.DynamicMetric{},
-		NetworkConnectionMetric: &model.NetworkConnectionMetric{},
-		Reader:                  reader,
-		Runner:                  runner,
+		Reader: reader,
+		Runner: runner,
 	}
 )
 
@@ -38,9 +35,10 @@ func DynamicMetricHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 
-	background.MutexDynamic.RLock()
-	dynamicMetric := background.DynamicMetric
-	background.MutexDynamic.RUnlock()
+	dynamicMetric := background.DynamicMetric.Load()
+	if dynamicMetric == nil {
+		dynamicMetric = &model.DynamicMetric{}
+	}
 	_ = json.NewEncoder(w).Encode(dynamicMetric)
 }
 func NetworkConnectionMetricHandler(w http.ResponseWriter, r *http.Request) {
@@ -51,9 +49,10 @@ func NetworkConnectionMetricHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 
-	background.MutexNetwork.RLock()
-	networkConnectionMetric := background.NetworkConnectionMetric
-	background.MutexNetwork.RUnlock()
+	networkConnectionMetric := background.NetworkConnectionMetric.Load()
+	if networkConnectionMetric == nil {
+		networkConnectionMetric = &model.NetworkConnectionMetric{}
+	}
 	_ = json.NewEncoder(w).Encode(networkConnectionMetric)
 }
 func StaticMetricHandler(w http.ResponseWriter, r *http.Request) {
@@ -62,10 +61,10 @@ func StaticMetricHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-
-	background.MutexStatic.RLock()
-	staticMetric := background.StaticMetric
-	background.MutexStatic.RUnlock()
+	staticMetric := background.StaticMetric.Load()
+	if staticMetric == nil {
+		staticMetric = &model.StaticMetric{}
+	}
 	_ = json.NewEncoder(w).Encode(staticMetric)
 }
 
