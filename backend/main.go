@@ -109,7 +109,7 @@ func main() {
 	go background.UpdateNetworkConnectionDetails(*networkConnectionInterval)
 	go background.UpdateStaticMetric(*staticMetricInterval)
 
-	webFS, _ := fs.Sub(frontend.WebEmb, "dist/frontend")
+	webFS, _ := fs.Sub(frontend.WebEmb, frontend.FrontendDistPath)
 	http.Handle("/", http.FileServer(http.FS(webFS)))
 
 	addr := *host + ":" + strconv.Itoa(*port)
