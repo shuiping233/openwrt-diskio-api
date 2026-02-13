@@ -4,18 +4,18 @@
 package metric
 
 import (
-	"sync/atomic"
+	"encoding/json"
+	"fmt"
+	"sync"
 	"time"
 
 	"openwrt-diskio-api/backend/model"
 )
 
 type BackgroundService struct {
-	StaticMetric            atomic.Pointer[model.StaticMetric]
-	DynamicMetric           atomic.Pointer[model.DynamicMetric]
-	NetworkConnectionMetric atomic.Pointer[model.NetworkConnectionMetric]
-	Reader                  FsReaderInterface
-	Runner                  CommandRunnerInterface
+	Reader    FsReaderInterface
+	Runner    CommandRunnerInterface
+	jsonCache sync.Map
 }
 
 func (b *BackgroundService) UpdateStaticMetric(
@@ -32,16 +32,19 @@ func (b *BackgroundService) UpdateStaticMetric(
 		staticSystemMetric := ReadStaticSystemMetric(b.Reader, b.Runner)
 		staticNetworkMetric := ReadStaticNetworkMetric(b.Reader, b.Runner)
 
-		b.StaticMetric.Store(&model.StaticMetric{
+		jsonBytes, err := json.Marshal(&model.StaticMetric{
 			Network: staticNetworkMetric,
 			System:  staticSystemMetric,
 		})
+		if err != nil {
+			panic(fmt.Errorf("StaticMetric json marshal error : %s", err))
+		}
+		b.jsonCache.Store(model.JsonCacheKeyStaticMetric, jsonBytes)
 
 		prevTime = currTime
 
 		time.Sleep(time.Duration(updateInterval) * time.Second)
 	}
-
 }
 func (b *BackgroundService) UpdateDynamicMetric(
 	updateInterval uint,
@@ -66,13 +69,17 @@ func (b *BackgroundService) UpdateDynamicMetric(
 		memoryMetric := ReadMemoryMetric(b.Reader)
 		systemMetric := ReadSystemMetric(b.Reader)
 
-		b.DynamicMetric.Store(&model.DynamicMetric{
+		jsonBytes, err := json.Marshal(&model.DynamicMetric{
 			Cpu:     cpuMetric,
 			Memory:  memoryMetric,
 			Network: networkMetric,
 			Storage: storageMetric,
 			System:  systemMetric,
 		})
+		if err != nil {
+			panic(fmt.Errorf("DynamicMetric json marshal error : %s", err))
+		}
+		b.jsonCache.Store(model.JsonCacheKeyDynamicMetric, jsonBytes)
 
 		prevTime = currTime
 
@@ -96,11 +103,22 @@ func (b *BackgroundService) UpdateNetworkConnectionDetails(
 		networkConnectionMetric := &model.NetworkConnectionMetric{}
 		ReadConnectionMetric(b.Reader, networkConnectionMetric, privateCidr)
 
-		b.NetworkConnectionMetric.Store(networkConnectionMetric)
+		jsonBytes, err := json.Marshal(networkConnectionMetric)
+		if err != nil {
+			panic(fmt.Errorf("NetworkConnectionDetails json marshal error : %s", err))
+		}
+		b.jsonCache.Store(model.JsonCacheKeyNetworkConnectionMetric, jsonBytes)
 
 		prevTime = currTime
 
 		time.Sleep(time.Duration(updateInterval) * time.Second)
 	}
+}
 
+func (b *BackgroundService) GetJsonBytes(key string) []byte {
+	cache, ok := b.jsonCache.Load(key)
+	if !ok {
+		return []byte{}
+	}
+	return cache.([]byte)
 }

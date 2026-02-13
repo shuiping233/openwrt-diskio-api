@@ -28,6 +28,9 @@ var (
 	RateUnitList                        = []string{BSecond, KbSecond, MbSecond, GbSecond, TbSecond, PbSecond}
 	DataUnitList                        = []string{Byte, KiloByte, MegaByte, GigaByte, TeraByte, PetaByte}
 	InternalNetworkDeviceNamePrefixList = []string{"br-lan", "docker", "tun"}
+	JsonCacheKeyStaticMetric            = "StaticMetric"
+	JsonCacheKeyDynamicMetric           = "DynamicMetric"
+	JsonCacheKeyNetworkConnectionMetric = "NetworkConnectionMetric"
 )
 
 type NetSnapUnit struct {

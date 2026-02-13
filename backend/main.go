@@ -6,6 +6,7 @@ package main
 import (
 	"encoding/json"
 	"flag"
+	"fmt"
 	"io/fs"
 	"log"
 	"net/http"
@@ -35,11 +36,17 @@ func DynamicMetricHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 
-	dynamicMetric := background.DynamicMetric.Load()
-	if dynamicMetric == nil {
-		dynamicMetric = &model.DynamicMetric{}
+	jsonBytes := background.GetJsonBytes(model.JsonCacheKeyDynamicMetric)
+	if len(jsonBytes) == 0 {
+		var err error
+		jsonBytes, err = json.Marshal(&model.DynamicMetric{})
+		if err != nil {
+			errMsg := fmt.Sprintf("json marshal error : %s", err.Error())
+			http.Error(w, errMsg, http.StatusInternalServerError)
+			return
+		}
 	}
-	_ = json.NewEncoder(w).Encode(dynamicMetric)
+	w.Write(jsonBytes)
 }
 func NetworkConnectionMetricHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -49,11 +56,17 @@ func NetworkConnectionMetricHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 
-	networkConnectionMetric := background.NetworkConnectionMetric.Load()
-	if networkConnectionMetric == nil {
-		networkConnectionMetric = &model.NetworkConnectionMetric{}
+	jsonBytes := background.GetJsonBytes(model.JsonCacheKeyNetworkConnectionMetric)
+	if len(jsonBytes) == 0 {
+		var err error
+		jsonBytes, err = json.Marshal(&model.DynamicMetric{})
+		if err != nil {
+			errMsg := fmt.Sprintf("json marshal error : %s", err.Error())
+			http.Error(w, errMsg, http.StatusInternalServerError)
+			return
+		}
 	}
-	_ = json.NewEncoder(w).Encode(networkConnectionMetric)
+	w.Write(jsonBytes)
 }
 func StaticMetricHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -61,11 +74,18 @@ func StaticMetricHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	staticMetric := background.StaticMetric.Load()
-	if staticMetric == nil {
-		staticMetric = &model.StaticMetric{}
+
+	jsonBytes := background.GetJsonBytes(model.JsonCacheKeyStaticMetric)
+	if len(jsonBytes) == 0 {
+		var err error
+		jsonBytes, err = json.Marshal(&model.DynamicMetric{})
+		if err != nil {
+			errMsg := fmt.Sprintf("json marshal error : %s", err.Error())
+			http.Error(w, errMsg, http.StatusInternalServerError)
+			return
+		}
 	}
-	_ = json.NewEncoder(w).Encode(staticMetric)
+	w.Write(jsonBytes)
 }
 
 func main() {
@@ -81,9 +101,9 @@ func main() {
 	log.Println("print input config : ")
 	log.Printf("host : %s", *host)
 	log.Printf("port : %d", *port)
-	log.Printf("dynamicMetricInterval : %v", dynamicMetricInterval)
-	log.Printf("networkConnectionInterval : %v", networkConnectionInterval)
-	log.Printf("staticMetricInterval : %v", staticMetricInterval)
+	log.Printf("dynamicMetricInterval : %v", *dynamicMetricInterval)
+	log.Printf("networkConnectionInterval : %v", *networkConnectionInterval)
+	log.Printf("staticMetricInterval : %v", *staticMetricInterval)
 
 	go background.UpdateDynamicMetric(*dynamicMetricInterval)
 	go background.UpdateNetworkConnectionDetails(*networkConnectionInterval)
