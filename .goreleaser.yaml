@@ -5,6 +5,7 @@ project_name: diskio
 before:
   hooks:
     - go mod tidy
+    - scripts/build-frontend.sh
     
 
 builds:
@@ -22,9 +23,9 @@ builds:
       - -trimpath
     ldflags:
       - -s -w
-    hooks:
-      pre: 
-      - cmd: "scripts/build-frontend.sh"
+        
+archives:
+  - formats: ["binary"]
 
 upx:
   - enabled: true

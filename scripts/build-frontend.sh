@@ -2,5 +2,5 @@
 set -euo pipefail
 
 cd frontend
-pnpm vite build --outDir ../dist/frontend  --emptyOutDir
+pnpm vite build --outDir ./dist/  --emptyOutDir
 
