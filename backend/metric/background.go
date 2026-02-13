@@ -5,120 +5,160 @@ package metric
 
 import (
 	"encoding/json"
-	"fmt"
+	"log"
 	"sync"
 	"time"
 
 	"openwrt-diskio-api/backend/model"
 )
 
+var semaphore = make(chan struct{}, 3)
+
 type BackgroundService struct {
-	Reader    FsReaderInterface
-	Runner    CommandRunnerInterface
-	jsonCache sync.Map
+	Reader                                 FsReaderInterface
+	Runner                                 CommandRunnerInterface
+	jsonCache                              sync.Map
+	UpdateStaticMetricInterval             uint
+	UpdateDynamicMetricInterval            uint
+	UpdateNetworkConnectionDetailsInterval uint
+	updatingStatusMap                      sync.Map
+	UpdateEventChan                        chan string
+	wg                                     sync.WaitGroup
 }
 
-func (b *BackgroundService) UpdateStaticMetric(
-	updateInterval uint,
-) {
-	prevTime := time.Now()
-	for {
-		currTime := time.Now()
-		elapsed := currTime.Sub(prevTime).Seconds()
-		if elapsed <= 0 {
-			continue
-		}
+func (b *BackgroundService) SetUpdateStaticMetricInterval(interval uint) {
+	b.UpdateStaticMetricInterval = interval
+}
+func (b *BackgroundService) SetUpdateDynamicMetricInterval(interval uint) {
+	b.UpdateDynamicMetricInterval = interval
+}
+func (b *BackgroundService) SetUpdateNetworkConnectionDetailsInterval(interval uint) {
+	b.UpdateNetworkConnectionDetailsInterval = interval
+}
 
-		staticSystemMetric := ReadStaticSystemMetric(b.Reader, b.Runner)
-		staticNetworkMetric := ReadStaticNetworkMetric(b.Reader, b.Runner)
+func (b *BackgroundService) UpdateStaticMetric() {
+	updateInterval := b.UpdateStaticMetricInterval
 
-		jsonBytes, err := json.Marshal(&model.StaticMetric{
-			Network: staticNetworkMetric,
-			System:  staticSystemMetric,
-		})
-		if err != nil {
-			panic(fmt.Errorf("StaticMetric json marshal error : %s", err))
-		}
-		b.jsonCache.Store(model.JsonCacheKeyStaticMetric, jsonBytes)
+	staticSystemMetric := ReadStaticSystemMetric(b.Reader, b.Runner)
+	staticNetworkMetric := ReadStaticNetworkMetric(b.Reader, b.Runner)
 
-		prevTime = currTime
-
-		time.Sleep(time.Duration(updateInterval) * time.Second)
+	jsonBytes, err := json.Marshal(&model.StaticMetric{
+		Network: staticNetworkMetric,
+		System:  staticSystemMetric,
+	})
+	if err != nil {
+		log.Fatalf("StaticMetric json marshal error : %s", err)
 	}
+	b.setJsonBytes(
+		model.JsonCacheKeyStaticMetric,
+		time.Duration(updateInterval)*time.Second,
+		jsonBytes,
+	)
+
 }
-func (b *BackgroundService) UpdateDynamicMetric(
-	updateInterval uint,
-) {
+func (b *BackgroundService) UpdateDynamicMetric() {
+	updateInterval := b.UpdateDynamicMetricInterval
 	diskSnap := model.DiskSnap{}
 	cpuSnap := model.CpuSnap{}
 	netSnap := model.NetSnap{
 		Interfaces: map[string]model.NetSnapUnit{},
 	}
 
-	prevTime := time.Now()
+	networkMetric := ReadNetworkMetric(b.Reader, &netSnap, updateInterval)
+	cpuMetric := ReadCpuMetric(b.Reader, &cpuSnap)
+	storageMetric := ReadStorageMetric(b.Reader, diskSnap, updateInterval)
+	memoryMetric := ReadMemoryMetric(b.Reader)
+	systemMetric := ReadSystemMetric(b.Reader)
 
-	for {
-		currTime := time.Now()
-		elapsed := currTime.Sub(prevTime).Seconds()
-		if elapsed <= 0 {
-			continue
-		}
-		networkMetric := ReadNetworkMetric(b.Reader, &netSnap, updateInterval)
-		cpuMetric := ReadCpuMetric(b.Reader, &cpuSnap)
-		storageMetric := ReadStorageMetric(b.Reader, diskSnap, updateInterval)
-		memoryMetric := ReadMemoryMetric(b.Reader)
-		systemMetric := ReadSystemMetric(b.Reader)
-
-		jsonBytes, err := json.Marshal(&model.DynamicMetric{
-			Cpu:     cpuMetric,
-			Memory:  memoryMetric,
-			Network: networkMetric,
-			Storage: storageMetric,
-			System:  systemMetric,
-		})
-		if err != nil {
-			panic(fmt.Errorf("DynamicMetric json marshal error : %s", err))
-		}
-		b.jsonCache.Store(model.JsonCacheKeyDynamicMetric, jsonBytes)
-
-		prevTime = currTime
-
-		time.Sleep(time.Duration(updateInterval) * time.Second)
+	jsonBytes, err := json.Marshal(&model.DynamicMetric{
+		Cpu:     cpuMetric,
+		Memory:  memoryMetric,
+		Network: networkMetric,
+		Storage: storageMetric,
+		System:  systemMetric,
+	})
+	if err != nil {
+		log.Fatalf("DynamicMetric json marshal error : %s", err)
 	}
+	b.setJsonBytes(
+		model.JsonCacheKeyDynamicMetric,
+		time.Duration(updateInterval)*time.Second,
+		jsonBytes,
+	)
 }
 
-func (b *BackgroundService) UpdateNetworkConnectionDetails(
-	updateInterval uint,
-) {
-	prevTime := time.Now()
-	for {
-		currTime := time.Now()
-		elapsed := currTime.Sub(prevTime).Seconds()
-		if elapsed <= 0 {
-			continue
-		}
+func (b *BackgroundService) UpdateNetworkConnectionDetails() {
+	updateInterval := b.UpdateNetworkConnectionDetailsInterval
 
-		privateCidr := ReadPrivateIpv4Addresses(b.Runner)
+	privateCidr := ReadPrivateIpv4Addresses(b.Runner)
 
-		networkConnectionMetric := &model.NetworkConnectionMetric{}
-		ReadConnectionMetric(b.Reader, networkConnectionMetric, privateCidr)
+	networkConnectionMetric := &model.NetworkConnectionMetric{}
+	ReadConnectionMetric(b.Reader, networkConnectionMetric, privateCidr)
 
-		jsonBytes, err := json.Marshal(networkConnectionMetric)
-		if err != nil {
-			panic(fmt.Errorf("NetworkConnectionDetails json marshal error : %s", err))
-		}
-		b.jsonCache.Store(model.JsonCacheKeyNetworkConnectionMetric, jsonBytes)
-
-		prevTime = currTime
-
-		time.Sleep(time.Duration(updateInterval) * time.Second)
+	jsonBytes, err := json.Marshal(networkConnectionMetric)
+	if err != nil {
+		log.Fatalf("NetworkConnectionDetails json marshal error : %s", err)
 	}
+	b.setJsonBytes(
+		model.JsonCacheKeyNetworkConnectionMetric,
+		time.Duration(updateInterval)*time.Second,
+		jsonBytes,
+	)
 }
 
+func (b *BackgroundService) Worker(index int) {
+	b.wg.Add(1)
+	defer b.wg.Done()
+	for key := range b.UpdateEventChan {
+		switch key {
+		case model.JsonCacheKeyDynamicMetric:
+			b.UpdateDynamicMetric()
+		case model.JsonCacheKeyStaticMetric:
+			b.UpdateStaticMetric()
+		case model.JsonCacheKeyNetworkConnectionMetric:
+			b.UpdateNetworkConnectionDetails()
+		}
+		b.updatingStatusMap.Delete(key)
+	}
+	log.Printf("worker %d exit", index)
+}
+
+func (b *BackgroundService) setJsonBytes(key string, updateInterval time.Duration, value []byte) {
+	now := time.Now().UTC()
+	b.jsonCache.Store(key,
+		model.CacheValue{
+			UpdateAt: now,
+			ExpireAt: now.Add(updateInterval),
+			Data:     value,
+		},
+	)
+}
 func (b *BackgroundService) GetJsonBytes(key string) []byte {
-	cache, ok := b.jsonCache.Load(key)
+	rawCache, ok := b.jsonCache.Load(key)
 	if !ok {
+		log.Printf("get json cache failed : %s not found", key)
 		return []byte{}
 	}
-	return cache.([]byte)
+	cache, ok := rawCache.(model.CacheValue)
+	if !ok {
+		log.Fatalf("get json cache %q failed : not valid %T ", key, model.CacheValue{})
+	}
+	now := time.Now().UTC()
+	if now.After(cache.ExpireAt) {
+		if _, loading := b.updatingStatusMap.LoadOrStore(key, true); !loading {
+			select {
+			case b.UpdateEventChan <- key:
+			default:
+				b.updatingStatusMap.Delete(key)
+			}
+		}
+	}
+	return cache.Data
+}
+
+func (b *BackgroundService) Close() {
+	if b.UpdateEventChan != nil {
+		close(b.UpdateEventChan)
+	}
+	b.wg.Wait()
 }

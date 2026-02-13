@@ -1,5 +1,7 @@
 package model
 
+import "time"
+
 const (
 	StringDefault              = "unknown"
 	NetConnectionIndexIpFamily = 0 // ipv4/ipv6
@@ -32,6 +34,12 @@ var (
 	JsonCacheKeyDynamicMetric           = "DynamicMetric"
 	JsonCacheKeyNetworkConnectionMetric = "NetworkConnectionMetric"
 )
+
+type CacheValue struct {
+	UpdateAt time.Time
+	ExpireAt time.Time
+	Data     []byte
+}
 
 type NetSnapUnit struct {
 	RxBytes float64

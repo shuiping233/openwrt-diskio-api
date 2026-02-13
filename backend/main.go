@@ -4,13 +4,17 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io/fs"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
 	"strconv"
+	"syscall"
 
 	frontend "openwrt-diskio-api"
 	"openwrt-diskio-api/backend/metric"
@@ -19,12 +23,15 @@ import (
 	"github.com/spf13/afero"
 )
 
+const workerNumber = 3
+
 var (
 	reader     = metric.FsReader{Fs: afero.NewOsFs()}
 	runner     = metric.CommandRunner{}
 	background = metric.BackgroundService{
-		Reader: reader,
-		Runner: runner,
+		Reader:          reader,
+		Runner:          runner,
+		UpdateEventChan: make(chan string, workerNumber),
 	}
 )
 
@@ -88,7 +95,20 @@ func StaticMetricHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(jsonBytes)
 }
 
+func PrettyExit(httpServer *http.Server) {
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	<-sigChan
+	if err := httpServer.Shutdown(context.Background()); err != nil {
+		log.Printf("HTTP server close failed : %v", err)
+	}
+	log.Println("receive exit signal , closing service...")
+	background.Close()
+	os.Exit(0)
+}
+
 func main() {
+
 	var (
 		host                      = flag.String("host", "127.0.0.1", "listen host")
 		port                      = flag.Int("port", 8080, "listen port")
@@ -98,6 +118,14 @@ func main() {
 	)
 	flag.Parse()
 
+	addr := *host + ":" + strconv.Itoa(*port)
+	httpServer := &http.Server{
+		Addr:    addr,
+		Handler: http.DefaultServeMux, // 你的 HandleFunc 都注册在这里
+	}
+
+	go PrettyExit(httpServer)
+
 	log.Println("print input config : ")
 	log.Printf("host : %s", *host)
 	log.Printf("port : %d", *port)
@@ -105,14 +133,20 @@ func main() {
 	log.Printf("networkConnectionInterval : %v", *networkConnectionInterval)
 	log.Printf("staticMetricInterval : %v", *staticMetricInterval)
 
-	go background.UpdateDynamicMetric(*dynamicMetricInterval)
-	go background.UpdateNetworkConnectionDetails(*networkConnectionInterval)
-	go background.UpdateStaticMetric(*staticMetricInterval)
+	background.SetUpdateDynamicMetricInterval(*dynamicMetricInterval)
+	background.SetUpdateNetworkConnectionDetailsInterval(*networkConnectionInterval)
+	background.SetUpdateStaticMetricInterval(*staticMetricInterval)
+
+	background.UpdateStaticMetric()
+	background.UpdateDynamicMetric()
+	background.UpdateNetworkConnectionDetails()
+
+	for index := range workerNumber {
+		go background.Worker(index)
+	}
 
 	webFS, _ := fs.Sub(frontend.WebEmb, frontend.FrontendDistPath)
 	http.Handle("/", http.FileServer(http.FS(webFS)))
-
-	addr := *host + ":" + strconv.Itoa(*port)
 
 	http.HandleFunc("/metric/dynamic", DynamicMetricHandler)
 	http.HandleFunc("/metric/network_connection", NetworkConnectionMetricHandler)
@@ -122,5 +156,7 @@ func main() {
 	log.Printf("Interface url : http://%s/metric/dynamic", addr)
 	log.Printf("Interface url : http://%s/metric/network_connection", addr)
 	log.Printf("Interface url : http://%s/metric/static", addr)
-	log.Fatal(http.ListenAndServe(addr, nil))
+	if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		log.Fatalf("listen error: %s\n", err)
+	}
 }
