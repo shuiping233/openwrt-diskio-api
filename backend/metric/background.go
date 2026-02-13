@@ -63,28 +63,41 @@ func (b *BackgroundService) UpdateDynamicMetric() {
 	netSnap := model.NetSnap{
 		Interfaces: map[string]model.NetSnapUnit{},
 	}
+	prevTime := time.Now()
 
-	networkMetric := ReadNetworkMetric(b.Reader, &netSnap, updateInterval)
-	cpuMetric := ReadCpuMetric(b.Reader, &cpuSnap)
-	storageMetric := ReadStorageMetric(b.Reader, diskSnap, updateInterval)
-	memoryMetric := ReadMemoryMetric(b.Reader)
-	systemMetric := ReadSystemMetric(b.Reader)
+	for {
+		currTime := time.Now()
+		elapsed := currTime.Sub(prevTime).Seconds()
+		if elapsed <= 0 {
+			continue
+		}
+		networkMetric := ReadNetworkMetric(b.Reader, &netSnap, updateInterval)
+		cpuMetric := ReadCpuMetric(b.Reader, &cpuSnap)
+		storageMetric := ReadStorageMetric(b.Reader, diskSnap, updateInterval)
+		memoryMetric := ReadMemoryMetric(b.Reader)
+		systemMetric := ReadSystemMetric(b.Reader)
 
-	jsonBytes, err := json.Marshal(&model.DynamicMetric{
-		Cpu:     cpuMetric,
-		Memory:  memoryMetric,
-		Network: networkMetric,
-		Storage: storageMetric,
-		System:  systemMetric,
-	})
-	if err != nil {
-		log.Fatalf("DynamicMetric json marshal error : %s", err)
+		jsonBytes, err := json.Marshal(&model.DynamicMetric{
+			Cpu:     cpuMetric,
+			Memory:  memoryMetric,
+			Network: networkMetric,
+			Storage: storageMetric,
+			System:  systemMetric,
+		})
+		if err != nil {
+			log.Fatalf("DynamicMetric json marshal error : %s", err)
+		}
+
+		b.setJsonBytes(
+			model.JsonCacheKeyDynamicMetric,
+			time.Duration(updateInterval)*time.Second,
+			jsonBytes,
+		)
+
+		prevTime = currTime
+
+		time.Sleep(time.Duration(updateInterval) * time.Second)
 	}
-	b.setJsonBytes(
-		model.JsonCacheKeyDynamicMetric,
-		time.Duration(updateInterval)*time.Second,
-		jsonBytes,
-	)
 }
 
 func (b *BackgroundService) UpdateNetworkConnectionDetails() {
@@ -111,8 +124,8 @@ func (b *BackgroundService) Worker(index int) {
 	defer b.wg.Done()
 	for key := range b.UpdateEventChan {
 		switch key {
-		case model.JsonCacheKeyDynamicMetric:
-			b.UpdateDynamicMetric()
+		// case model.JsonCacheKeyDynamicMetric:
+		// 	b.UpdateDynamicMetric()
 		case model.JsonCacheKeyStaticMetric:
 			b.UpdateStaticMetric()
 		case model.JsonCacheKeyNetworkConnectionMetric:
@@ -143,6 +156,10 @@ func (b *BackgroundService) GetJsonBytes(key string) []byte {
 	if !ok {
 		log.Fatalf("get json cache %q failed : not valid %T ", key, model.CacheValue{})
 	}
+	if key == model.JsonCacheKeyDynamicMetric {
+		return cache.Data
+	}
+
 	now := time.Now().UTC()
 	if now.After(cache.ExpireAt) {
 		if _, loading := b.updatingStatusMap.LoadOrStore(key, true); !loading {

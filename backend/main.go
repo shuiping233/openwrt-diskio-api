@@ -23,7 +23,7 @@ import (
 	"github.com/spf13/afero"
 )
 
-const workerNumber = 3
+const workerNumber = 2
 
 var (
 	reader     = metric.FsReader{Fs: afero.NewOsFs()}
@@ -138,9 +138,9 @@ func main() {
 	background.SetUpdateStaticMetricInterval(*staticMetricInterval)
 
 	background.UpdateStaticMetric()
-	background.UpdateDynamicMetric()
 	background.UpdateNetworkConnectionDetails()
 
+	go background.UpdateDynamicMetric()
 	for index := range workerNumber {
 		go background.Worker(index)
 	}
