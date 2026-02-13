@@ -2,5 +2,5 @@ package openwrtdiskioapi
 
 import "embed"
 
-//go:embed dist/frontend
+//go:embed frontend/dist
 var WebEmb embed.FS
