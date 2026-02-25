@@ -1,14 +1,22 @@
 import { reactive, readonly } from 'vue';
 import { db } from './utils/db';
 
+export type TabType = 'system' | 'network' | 'monitoringCharts';
+
 export interface Settings {
   enable_metric_record: boolean;
   retention_days: number;
+  refresh_interval: number;
+  active_tab: TabType;
+  chart_time_range: number;
 }
 
 export const defaultSettings: Settings = {
   enable_metric_record: false,
-  retention_days: 7
+  retention_days: 7,
+  refresh_interval: 2000,
+  active_tab: 'system',
+  chart_time_range: 60 * 1000
 };
 
 const settings = reactive<Settings>({ ...defaultSettings });

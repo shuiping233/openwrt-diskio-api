@@ -18,7 +18,7 @@ import { useDatabase } from '../useDatabase';
 import type { HistoryRecord, DynamicApiResponse, StorageData } from '../model';
 import { TimeRanges } from '../model';
 import { normalizeToBytes, formatIOBytes, BytesFixed, covertDataBytes, convertToBytes } from '../utils/convert';
-import { dataColorPaletteTask } from 'echarts/types/src/visual/style.js';
+import { useSettings } from '../useSettings';
 
 // 注册 ECharts 组件
 use([
@@ -41,6 +41,7 @@ const props = defineProps<{
 }>();
 
 const { getHistory, getAccordionState, setAccordionState } = useDatabase();
+const { settings, setConfig } = useSettings();
 
 // ================= 常量与辅助函数 =================
 function formatIOTooltip(value: number): string {
@@ -54,8 +55,7 @@ const colors = [
 ];
 
 // ================= 状态定义 =================
-const defaultRange = TimeRanges[0].value;
-const globalTimeRange = ref(defaultRange);
+const globalTimeRange = computed(() => settings.chart_time_range);
 
 const chartStates = reactive<Record<string, { range: number; targetUnit?: string }>>({});
 
@@ -755,9 +755,13 @@ const handleRangeChange = async (key: string) => {
   }
 };
 
-const handleGlobalRangeChange = async () => {
+const handleGlobalRangeChange = async (event: Event) => {
+  const target = event.target as HTMLSelectElement;
+  const newRange = Number(target.value);
+  await setConfig('chart_time_range', newRange);
+  
   Object.keys(chartStates).forEach(key => {
-    chartStates[key].range = globalTimeRange.value;
+    chartStates[key].range = newRange;
   });
 
   await loadConnectionsHistory();
@@ -823,7 +827,7 @@ onMounted(async () => {
       <div class="flex items-center gap-2">
         <div class="text-slate-400 text-sm text-right">全局图表时间范围 :</div>
         <div class="relative">
-          <select v-model="globalTimeRange" @change="handleGlobalRangeChange"
+          <select :value="settings.chart_time_range" @change="handleGlobalRangeChange"
             class="bg-slate-900 border border-slate-600 text-white text-xs px-2 py-1 rounded outline-none focus:border-blue-500">
             <option v-for="r in TimeRanges" :key="r.value" :value="r.value">{{ r.label }}</option>
           </select>
