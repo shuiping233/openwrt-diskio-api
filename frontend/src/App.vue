@@ -10,11 +10,13 @@ import SystemOverview from './components/SystemOverview.vue';
 import MonitoringCharts from './components/MonitoringCharts.vue';
 import { useToast } from './useToast';
 import Toaster from './components/Toaster.vue';
-import { useDatabase } from './useDatabase'; // 新增导入
-import { covertDataBytes, normalizeToBytes } from './utils/convert'; // 新增导入
-import type { HistoryRecord } from "./model"; // 确保类型被正确导入
+import { useDatabase } from './useDatabase';
+import { covertDataBytes, normalizeToBytes } from './utils/convert';
+import type { HistoryRecord } from "./model";
+import { useSettings } from './useSettings';
 
-const { addHistoryBatch, getConfig } = useDatabase();
+const { addHistoryBatch } = useDatabase();
+const { settings, init: initSettings } = useSettings();
 
 // ================= 2. 状态定义 =================
 
@@ -31,8 +33,6 @@ enum Tab {
   Network = 'network',
   MonitoringCharts = 'monitoringCharts'
 }
-
-const enableMetricRecord = ref(false);
 
 const uiState = reactive({
   activeTab: Tab.System as Tab,
@@ -223,7 +223,7 @@ const fetchData = async () => {
     data.static = (await sRes.json()) as StaticApiResponse;
 
     // 保存动态数据到数据库
-    if (enableMetricRecord.value) {
+    if (settings.enable_metric_record) {
       saveDynamicDataToDB(data.dynamic, data.connection);
     }
 
@@ -260,9 +260,7 @@ const startPolling = () => {
 // ================= 5. 生命周期 =================
 
 onMounted(async () => {
-  const enabled = await getConfig<boolean>('enable_metric_record');
-  if (enabled) enableMetricRecord.value = enabled;
-
+  await initSettings();
   fetchData();
   startPolling();
 });
