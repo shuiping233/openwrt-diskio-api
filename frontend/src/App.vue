@@ -270,7 +270,9 @@ const handleRefreshIntervalChange = () => {
 
 const handleTabChange = (tab: TabType) => {
   setConfig('active_tab', tab);
-  fetchData();
+  if (settings.enable_metric_record === false) {
+    fetchData();
+  }
 };
 
 // ================= 5. 生命周期 =================
