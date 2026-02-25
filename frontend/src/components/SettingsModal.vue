@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue';
+import { watch } from 'vue';
 import { useDatabase } from '../useDatabase';
 import { useToast } from '../useToast';
+import { useSettings, type Settings } from '../useSettings';
 
 // 定义 Props (支持 v-model)
 const props = defineProps<{
@@ -13,25 +14,27 @@ const emit = defineEmits<{
 }>();
 
 // 逻辑
-const { getConfig, setConfig, clearHistory } = useDatabase();
-const { success, error } = useToast();
-
-const retentionDays = ref(7);
-const enableMetricRecord = ref(false);
-
-// 加载配置
-onMounted(async () => {
-  const days = await getConfig<number>('retention_days');
-  if (days) retentionDays.value = days;
-  
-  const enabled = await getConfig<boolean>('enable_metric_record');
-  if (enabled) enableMetricRecord.value = enabled;
-});
+const { clearHistory } = useDatabase();
+const { success } = useToast();
+const { settings, setConfig } = useSettings();
 
 // 保存配置 (即时生效)
-const handleSave = async (key: string, value: any) => {
+const handleSave = async <K extends keyof Settings>(key: K, value: Settings[K]) => {
   await setConfig(key, value);
   success(`设置已更新，"${key}" 已设置为 "${value}"`);
+};
+
+const toggleMetricRecord = async () => {
+  const newValue = !settings.enable_metric_record;
+  await handleSave('enable_metric_record', newValue);
+};
+
+const updateRetentionDays = async (event: Event) => {
+  const target = event.target as HTMLInputElement;
+  const value = parseInt(target.value, 10);
+  if (!isNaN(value) && value >= 1 && value <= 365) {
+    await handleSave('retention_days', value);
+  }
 };
 
 // 清空数据
@@ -98,21 +101,21 @@ watch(() => props.isOpen, (newVal) => {
               <div class="flex justify-between items-center">
                 <label class="text-slate-300 text-sm">启用历史图表数据记录</label>
                 <button type="button"
-                  @click="enableMetricRecord = !enableMetricRecord; handleSave('enable_metric_record', enableMetricRecord)"
+                  @click="toggleMetricRecord"
                   class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors"
-                  :class="enableMetricRecord ? 'bg-blue-600' : 'bg-slate-600'">
+                  :class="settings.enable_metric_record ? 'bg-blue-600' : 'bg-slate-600'">
                   <span class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform"
-                    :class="enableMetricRecord ? 'translate-x-6' : 'translate-x-1'" />
+                    :class="settings.enable_metric_record ? 'translate-x-6' : 'translate-x-1'" />
                 </button>
               </div>
               <!-- 配置 : 数据保存天数 -->
               <div class="flex justify-between items-center">
-                <label class="text-sm" :class="enableMetricRecord ? 'text-slate-300' : 'text-slate-500'">
+                <label class="text-sm" :class="settings.enable_metric_record ? 'text-slate-300' : 'text-slate-500'">
                   数据保留天数
                 </label>
-                <input type="number" min="1" max="365" v-model.number="retentionDays"
-                  @change="handleSave('retention_days', retentionDays)" :disabled="!enableMetricRecord"
-                  class="border rounded px-3 py-1.5 w-24 outline-none transition-colors" :class="enableMetricRecord
+                <input type="number" min="1" max="365" :value="settings.retention_days"
+                  @change="updateRetentionDays" :disabled="!settings.enable_metric_record"
+                  class="border rounded px-3 py-1.5 w-24 outline-none transition-colors" :class="settings.enable_metric_record
                     ? 'bg-slate-900 border-slate-600 text-white focus:border-blue-500'
                     : 'bg-slate-800 border-slate-700 text-slate-500 cursor-not-allowed'
                     " />

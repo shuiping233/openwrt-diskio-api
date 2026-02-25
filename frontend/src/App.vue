@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted, onUnmounted, type Ref } from 'vue';
+import { ref, reactive, onMounted, onUnmounted, watch, type Ref } from 'vue';
 import dayjs from 'dayjs';
 import type {
   DynamicApiResponse, StaticApiResponse, ConnectionApiResponse
@@ -10,13 +10,13 @@ import SystemOverview from './components/SystemOverview.vue';
 import MonitoringCharts from './components/MonitoringCharts.vue';
 import { useToast } from './useToast';
 import Toaster from './components/Toaster.vue';
-import { useDatabase } from './useDatabase'; // 新增导入
-import { covertDataBytes, normalizeToBytes } from './utils/convert'; // 新增导入
-import type { HistoryRecord } from "./model"; // 确保类型被正确导入
+import { useDatabase } from './useDatabase';
+import { covertDataBytes, normalizeToBytes } from './utils/convert';
+import type { HistoryRecord } from "./model";
+import { useSettings, type TabType } from './useSettings';
 
-const { addHistoryBatch, getConfig } = useDatabase();
-
-// ================= 2. 状态定义 =================
+const { addHistoryBatch } = useDatabase();
+const { settings, setConfig, init: initSettings } = useSettings();
 
 const data = reactive({
   dynamic: {} as DynamicApiResponse,
@@ -26,19 +26,10 @@ const data = reactive({
 
 const showSettings = ref(false);
 
-enum Tab {
-  System = 'system',
-  Network = 'network',
-  MonitoringCharts = 'monitoringCharts'
-}
-
-const enableMetricRecord = ref(false);
-
 const uiState = reactive({
-  activeTab: Tab.System as Tab,
-  refreshInterval: 2000,
   lastUpdated: '--',
   isLoading: false,
+  refreshInterval: 2000,
   status: '初始化...'
 });
 
@@ -206,24 +197,41 @@ const fetchData = async () => {
   uiState.status = '刷新中...';
   const reqTime = formatTime();
 
+  const shouldFetchAll = settings.enable_metric_record || settings.active_tab === 'monitoringCharts';
+  const shouldFetchDynamic = shouldFetchAll || settings.active_tab === 'system';
+  const shouldFetchConnection = shouldFetchAll || settings.active_tab === 'network';
+  const shouldFetchStatic = shouldFetchAll || settings.active_tab === 'system';
+
   try {
-    const [dRes, cRes, sRes] = await Promise.all([
-      fetch('/metric/dynamic'),
-      fetch('/metric/network_connection'),
-      fetch('/metric/static')
-    ]);
+    const requests: Promise<Response>[] = [];
 
-    // 直接抛出原生错误，而不是自定义错误
-    if (!dRes.ok) throw new Error(`动态数据接口错误: ${dRes.status} ${dRes.statusText}`);
-    if (!cRes.ok) throw new Error(`网络连接接口错误: ${cRes.status} ${cRes.statusText}`);
-    if (!sRes.ok) throw new Error(`静态数据接口错误: ${sRes.status} ${sRes.statusText}`);
+    if (shouldFetchDynamic) requests.push(fetch('/metric/dynamic'));
+    if (shouldFetchConnection) requests.push(fetch('/metric/network_connection'));
+    if (shouldFetchStatic) requests.push(fetch('/metric/static'));
 
-    data.dynamic = (await dRes.json()) as DynamicApiResponse;
-    data.connection = (await cRes.json()) as ConnectionApiResponse;
-    data.static = (await sRes.json()) as StaticApiResponse;
+    const responses = await Promise.all(requests);
 
-    // 保存动态数据到数据库
-    if (enableMetricRecord.value) {
+    let resIndex = 0;
+
+    if (shouldFetchDynamic) {
+      const dRes = responses[resIndex++];
+      if (!dRes.ok) throw new Error(`动态数据接口错误: ${dRes.status} ${dRes.statusText}`);
+      data.dynamic = (await dRes.json()) as DynamicApiResponse;
+    }
+
+    if (shouldFetchConnection) {
+      const cRes = responses[resIndex++];
+      if (!cRes.ok) throw new Error(`网络连接接口错误: ${cRes.status} ${cRes.statusText}`);
+      data.connection = (await cRes.json()) as ConnectionApiResponse;
+    }
+
+    if (shouldFetchStatic) {
+      const sRes = responses[resIndex];
+      if (!sRes.ok) throw new Error(`静态数据接口错误: ${sRes.status} ${sRes.statusText}`);
+      data.static = (await sRes.json()) as StaticApiResponse;
+    }
+
+    if (settings.enable_metric_record) {
       saveDynamicDataToDB(data.dynamic, data.connection);
     }
 
@@ -233,15 +241,11 @@ const fetchData = async () => {
     uiState.status = '错误';
     const { error } = useToast();
 
-    // 根据错误类型显示不同消息
     if (e instanceof TypeError) {
-      // 网络错误，如连接失败
       error(`网络错误: ${e.message}`);
     } else if (e.message.includes('接口错误')) {
-      // HTTP 错误状态
       error(e.message);
     } else {
-      // 其他错误
       error(`请求失败: ${e.message}`);
     }
   } finally {
@@ -250,19 +254,32 @@ const fetchData = async () => {
   }
 };
 
-const startPolling = () => {
+const startPolling = (showToast = false) => {
   if (timer.value) clearInterval(timer.value);
   timer.value = window.setInterval(fetchData, uiState.refreshInterval);
-  const { success } = useToast();
-  success(`刷新间隔已调整为 ${uiState.refreshInterval / 1000} 秒`);
+  if (showToast) {
+    const { success } = useToast();
+    success(`刷新间隔已调整为 ${uiState.refreshInterval / 1000} 秒`);
+  }
+};
+
+const handleRefreshIntervalChange = () => {
+  setConfig('refresh_interval', uiState.refreshInterval);
+  startPolling(true);
+};
+
+const handleTabChange = (tab: TabType) => {
+  setConfig('active_tab', tab);
+  if (settings.enable_metric_record === false) {
+    fetchData();
+  }
 };
 
 // ================= 5. 生命周期 =================
 
 onMounted(async () => {
-  const enabled = await getConfig<boolean>('enable_metric_record');
-  if (enabled) enableMetricRecord.value = enabled;
-
+  await initSettings();
+  uiState.refreshInterval = settings.refresh_interval;
   fetchData();
   startPolling();
 });
@@ -299,7 +316,7 @@ onUnmounted(() => {
         <span class="font-mono">{{ uiState.lastUpdated }}</span>
 
         <!-- Select -->
-        <select v-model.number="uiState.refreshInterval" @change="startPolling"
+        <select v-model.number="uiState.refreshInterval" @change="handleRefreshIntervalChange"
           class="bg-slate-800 text-white border border-slate-700 rounded px-2 py-1 outline-none focus:border-slate-500 cursor-pointer">
           <option :value="1000">1s</option>
           <option :value="2000">2s</option>
@@ -325,28 +342,28 @@ onUnmounted(() => {
 
     <!-- Tabs -->
     <nav class="flex gap-2 mb-5">
-      <button @click="uiState.activeTab = Tab.System"
+      <button @click="handleTabChange('system')"
         class="px-5 py-2 text-sm font-semibold cursor-pointer border border-slate-700 rounded-lg transition-colors"
         :class="[
-          uiState.activeTab === Tab.System
+          settings.active_tab === 'system'
             ? 'text-white border-b-2 border-blue-500 bg-transparent'
             : 'text-slate-400 bg-slate-800/50 hover:bg-slate-800'
         ]">
         系统概览
       </button>
-      <button @click="uiState.activeTab = Tab.Network"
+      <button @click="handleTabChange('network')"
         class="px-5 py-2 text-sm font-semibold cursor-pointer border border-slate-700 rounded-lg transition-colors"
         :class="[
-          uiState.activeTab === Tab.Network
+          settings.active_tab === 'network'
             ? 'text-white border-b-2 border-blue-500 bg-transparent'
             : 'text-slate-400 bg-slate-800/50 hover:bg-slate-800'
         ]">
         网络连接
       </button>
-      <button @click="uiState.activeTab = Tab.MonitoringCharts"
+      <button @click="handleTabChange('monitoringCharts')"
         class="px-5 py-2 text-sm font-semibold cursor-pointer border border-slate-700 rounded-lg transition-colors"
         :class="[
-          uiState.activeTab === Tab.MonitoringCharts
+          settings.active_tab === 'monitoringCharts'
             ? 'text-white border-b-2 border-blue-500 bg-transparent'
             : 'text-slate-400 bg-slate-800/50 hover:bg-slate-800'
         ]">
@@ -355,18 +372,16 @@ onUnmounted(() => {
     </nav>
 
     <!-- Tab: System Overview -->
-    <div v-if="uiState.activeTab === 'system'">
+    <div v-if="settings.active_tab === 'system'">
       <SystemOverview :data="data" />
     </div>
 
     <!-- Tab: Network Connections -->
-    <div v-if="uiState.activeTab === Tab.Network" class="p-0"> <!-- p-0 可以根据需要调整 -->
-      <!-- 👇 使用组件，传入连接数据 -->
+    <div v-if="settings.active_tab === 'network'" class="p-0">
       <NetworkConnectionTable :connection-data="data.connection" />
     </div>
     <!-- Tab: Analytics -->
-    <div v-if="uiState.activeTab === Tab.MonitoringCharts">
-      <!-- 👇 传入 data -->
+    <div v-if="settings.active_tab === 'monitoringCharts'">
       <MonitoringCharts :data="data" />
     </div>
 

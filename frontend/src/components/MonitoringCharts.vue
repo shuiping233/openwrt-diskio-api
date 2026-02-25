@@ -18,7 +18,7 @@ import { useDatabase } from '../useDatabase';
 import type { HistoryRecord, DynamicApiResponse, StorageData } from '../model';
 import { TimeRanges } from '../model';
 import { normalizeToBytes, formatIOBytes, BytesFixed, covertDataBytes, convertToBytes } from '../utils/convert';
-import { dataColorPaletteTask } from 'echarts/types/src/visual/style.js';
+import { useSettings } from '../useSettings';
 
 // 注册 ECharts 组件
 use([
@@ -41,6 +41,7 @@ const props = defineProps<{
 }>();
 
 const { getHistory, getAccordionState, setAccordionState } = useDatabase();
+const { settings, setConfig } = useSettings();
 
 // ================= 常量与辅助函数 =================
 function formatIOTooltip(value: number): string {
@@ -54,8 +55,7 @@ const colors = [
 ];
 
 // ================= 状态定义 =================
-const defaultRange = TimeRanges[0].value;
-const globalTimeRange = ref(defaultRange);
+const globalTimeRange = computed(() => settings.chart_time_range);
 
 const chartStates = reactive<Record<string, { range: number; targetUnit?: string }>>({});
 
@@ -228,12 +228,21 @@ const chartOptions = reactive<Record<string, EChartsOption>>({
   ], true, true),
 
   // 存储分类 - 总 IO
-  storage_total_io: getIOOption('总磁盘 IO', '#ec4899'),
-
-  // 存储分类 - 总使用量
-  memory_used: getFixedAxisOption('内存使用量', '#8b5cf6', props.data.dynamic?.memory.total.unit, 0, props.data.dynamic?.memory.total.value) // 初始最大值为0，后续动态调整
+  storage_total_io: getIOOption('总磁盘 IO', '#ec4899')
 
 });
+
+const initMemoryUsedChart = (data: DynamicApiResponse) => {
+  if (!chartOptions.memory_used && data.memory?.total) {
+    chartOptions.memory_used = getFixedAxisOption(
+      '内存使用量',
+      '#8b5cf6',
+      data.memory.total.unit,
+      0,
+      data.memory.total.value
+    );
+  }
+};
 
 // 计算属性：过滤各分类的图表
 const getBasicCharts = computed(() => {
@@ -579,12 +588,13 @@ const appendDataPointMultiSeries = (chartKey: string, seriesIndex: number, times
 // ================= 监听数据流 =================
 
 watch(() => props.data.dynamic, (newData) => {
-  if (!newData) return;
+  if (!newData || Object.keys(newData).length === 0) return;
   const now = Date.now();
 
   initCpuCoreCharts(newData);
   initNetworkIfaceCharts(newData);
   initStorageCharts(newData);
+  initMemoryUsedChart(newData);
 
   // 基本指标 - CPU Total
   const cpuUsage = newData.cpu?.total?.usage;
@@ -630,16 +640,13 @@ watch(() => props.data.dynamic, (newData) => {
 
   // 内存使用量
   const memUsed = newData.memory?.used;
-  if (memUsed?.value !== undefined) {
+  if (memUsed?.value !== undefined && chartOptions.memory_used) {
     const memMax = newData.memory?.total?.value;
-    const memOption = chartOptions.memory_used;
-    if (memOption && memOption.yAxis) {
-      (memOption.yAxis as any).max = memMax;
+    if (memMax && chartOptions.memory_used.yAxis) {
+      (chartOptions.memory_used.yAxis as any).max = memMax;
     }
-    if (memUsed?.value !== undefined) {
-      const [value, unit] = covertDataBytes(memUsed.value, memUsed.unit, newData.memory?.total?.unit);
-      appendDataPoint('memory_used', now, value, unit);
-    }
+    const [value, unit] = covertDataBytes(memUsed.value, memUsed.unit, newData.memory?.total?.unit);
+    appendDataPoint('memory_used', now, value, unit);
   }
 
   // 网络 - 总网卡 IO
@@ -755,9 +762,13 @@ const handleRangeChange = async (key: string) => {
   }
 };
 
-const handleGlobalRangeChange = async () => {
+const handleGlobalRangeChange = async (event: Event) => {
+  const target = event.target as HTMLSelectElement;
+  const newRange = Number(target.value);
+  await setConfig('chart_time_range', newRange);
+
   Object.keys(chartStates).forEach(key => {
-    chartStates[key].range = globalTimeRange.value;
+    chartStates[key].range = newRange;
   });
 
   await loadConnectionsHistory();
@@ -799,7 +810,9 @@ onMounted(async () => {
   Object.keys(chartOptions).filter(k => k.startsWith('cpu_core_')).forEach(k => loadHistoryAndRender(k));
 
   // 加载内存使用量
-  await loadHistoryAndRender('memory_used');
+  if (chartOptions.memory_used) {
+    await loadHistoryAndRender('memory_used');
+  }
 
   // 加载存储IO和空间
   Object.keys(chartOptions).filter(k => k.startsWith('storage_io_')).forEach(k => {
@@ -823,7 +836,7 @@ onMounted(async () => {
       <div class="flex items-center gap-2">
         <div class="text-slate-400 text-sm text-right">全局图表时间范围 :</div>
         <div class="relative">
-          <select v-model="globalTimeRange" @change="handleGlobalRangeChange"
+          <select :value="settings.chart_time_range" @change="handleGlobalRangeChange"
             class="bg-slate-900 border border-slate-600 text-white text-xs px-2 py-1 rounded outline-none focus:border-blue-500">
             <option v-for="r in TimeRanges" :key="r.value" :value="r.value">{{ r.label }}</option>
           </select>
