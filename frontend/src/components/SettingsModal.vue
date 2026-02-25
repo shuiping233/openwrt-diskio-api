@@ -2,7 +2,7 @@
 import { watch } from 'vue';
 import { useDatabase } from '../useDatabase';
 import { useToast } from '../useToast';
-import { useSettings } from '../useSettings';
+import { useSettings, type Settings } from '../useSettings';
 
 // 定义 Props (支持 v-model)
 const props = defineProps<{
@@ -19,7 +19,7 @@ const { success } = useToast();
 const { settings, setConfig } = useSettings();
 
 // 保存配置 (即时生效)
-const handleSave = async (key: 'retention_days' | 'enable_metric_record', value: any) => {
+const handleSave = async <K extends keyof Settings>(key: K, value: Settings[K]) => {
   await setConfig(key, value);
   success(`设置已更新，"${key}" 已设置为 "${value}"`);
 };
