@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, h, watch, reactive } from 'vue';
+import { ref, computed, h, watch, reactive, onMounted } from 'vue';
 import {
   useVueTable,
   getCoreRowModel,
@@ -14,11 +14,15 @@ import type { ConnectionApiResponse, Connection } from '../model';
 import { compressIPv6 } from '../utils/ipv6';
 import { convertToBytes, BytesFixed, formatIOBytes, normalizeToBytes } from '../utils/convert';
 import { useToast } from '../useToast';
+import { useDatabase } from '../useDatabase';
 
 // Props
 const props = defineProps<{
   connectionData?: ConnectionApiResponse;
 }>();
+
+// Database
+const { getAccordionState, setAccordionState } = useDatabase();
 
 // ================= 1. 折叠状态管理 =================
 const uiState = reactive({
@@ -31,6 +35,46 @@ const uiState = reactive({
     other: false,  // 其他IP组折叠状态
   }
 });
+
+// 加载折叠状态
+onMounted(async () => {
+  // 主折叠栏状态
+  const aggregationState = await getAccordionState('network_connection_aggregation');
+  if (aggregationState !== undefined) {
+    uiState.accordions.aggregation = aggregationState;
+  }
+  
+  const connectionListState = await getAccordionState('network_connection_list');
+  if (connectionListState !== undefined) {
+    uiState.accordions.connectionList = connectionListState;
+  }
+  
+  // IP分组折叠状态
+  const lanGroupState = await getAccordionState('network_connection_lan_group');
+  if (lanGroupState !== undefined) {
+    uiState.ipGroupCollapsed.lan = !lanGroupState; // 注意：存储的是展开状态，我们用的是折叠状态
+  }
+  
+  const otherGroupState = await getAccordionState('network_connection_other_group');
+  if (otherGroupState !== undefined) {
+    uiState.ipGroupCollapsed.other = !otherGroupState;
+  }
+});
+
+// 切换主折叠状态
+const toggleMainAccordion = async (key: 'aggregation' | 'connectionList') => {
+  uiState.accordions[key] = !uiState.accordions[key];
+  const storageKey = key === 'aggregation' ? 'network_connection_aggregation' : 'network_connection_list';
+  await setAccordionState(storageKey, uiState.accordions[key]);
+};
+
+// 切换IP分组折叠状态
+const toggleIpGroup = async (group: 'lan' | 'other') => {
+  uiState.ipGroupCollapsed[group] = !uiState.ipGroupCollapsed[group];
+  const storageKey = group === 'lan' ? 'network_connection_lan_group' : 'network_connection_other_group';
+  // 存储展开状态（与折叠状态相反）
+  await setAccordionState(storageKey, !uiState.ipGroupCollapsed[group]);
+};
 
 // ================= 2. 全局搜索词 =================
 const globalFilter = ref('');
@@ -373,28 +417,29 @@ const fallbackCopyTextToClipboard = (text: string) => {
 // ================= 8. TanStack Table 配置 (使用 h 函数代替 JSX 以避免 TS 解析错误) =================
 const columnHelper = createColumnHelper<any>();
 
+// 只允许同时排列一行的排序函数
+const createSingleSortFn = (columnId: string) => {
+  return (rowA: any, rowB: any) => {
+    const valA = rowA.original[columnId] || '';
+    const valB = rowB.original[columnId] || '';
+    return String(valA).localeCompare(String(valB));
+  };
+};
+
 const columns = [
   // 地址族
   columnHelper.accessor('ip_family', {
     header: '地址族',
     cell: (info) => h('span', { class: 'bg-slate-700 px-2 py-1 rounded text-xs text-slate-200' }, info.getValue()?.toUpperCase()),
     enableSorting: true,
-    sortingFn: (rowA, rowB) => {
-      const valA = rowA.original.ip_family || '';
-      const valB = rowB.original.ip_family || '';
-      return valA.localeCompare(valB);
-    },
+    sortingFn: createSingleSortFn('ip_family'),
   }),
   // 协议
   columnHelper.accessor('protocol', {
     header: '协议',
     cell: (info) => h('span', { class: 'bg-slate-700 px-2 py-1 rounded text-xs text-slate-200' }, info.getValue()?.toUpperCase()),
     enableSorting: true,
-    sortingFn: (rowA, rowB) => {
-      const valA = rowA.original.protocol || '';
-      const valB = rowB.original.protocol || '';
-      return valA.localeCompare(valB);
-    },
+    sortingFn: createSingleSortFn('protocol'),
   }),
   // 源地址
   columnHelper.accessor('source_ip', {
@@ -405,7 +450,7 @@ const columns = [
       const port = row.source_port;
       return h('span', { class: 'font-mono text-slate-300' }, formatIP(ip, row.ip_family) + (port > 0 ? ':' + port : ''));
     },
-    enableSorting: true, // 启用排序
+    enableSorting: true,
     sortingFn: (rowA, rowB) => {
       const ipA = formatIP(rowA.original.source_ip, rowA.original.ip_family);
       const portA = rowA.original.source_port;
@@ -437,7 +482,7 @@ const columns = [
       const port = row.destination_port;
       return h('span', { class: 'font-mono text-slate-300' }, formatIP(ip, row.ip_family) + (port > 0 ? ':' + port : ''));
     },
-    enableSorting: true, // 启用排序
+    enableSorting: true,
     sortingFn: (rowA, rowB) => {
       const ipA = formatIP(rowA.original.destination_ip, rowA.original.ip_family);
       const portA = rowA.original.destination_port;
@@ -465,11 +510,7 @@ const columns = [
     header: '状态',
     cell: (info) => h('span', { class: 'text-slate-300' }, info.getValue() || '-'),
     enableSorting: true,
-    sortingFn: (rowA, rowB) => {
-      const valA = rowA.original.state || '';
-      const valB = rowB.original.state || '';
-      return valA.localeCompare(valB);
-    },
+    sortingFn: createSingleSortFn('state'),
   }),
   // 传输情况
   columnHelper.accessor('traffic', {
@@ -547,12 +588,12 @@ const columns = [
       class: 'text-xs bg-slate-700 hover:bg-blue-600 text-white px-2 py-1 rounded transition-colors',
       title: '复制连接信息'
     }, '复制'),
-    enableSorting: false, // 禁用排序
+    enableSorting: false,
   }),
 ];
 
-// 初始状态
-const initialSorting = [{ id: 'traffic', desc: true }];
+// 初始状态 - 只允许同时排列一行
+const initialSorting = [{ id: 'traffic', desc: true }] as SortingState;
 
 const table = useVueTable({
   data: displayData,
@@ -560,6 +601,7 @@ const table = useVueTable({
   getCoreRowModel: getCoreRowModel(),
   getSortedRowModel: getSortedRowModel(),
   getFilteredRowModel: getFilteredRowModel(),
+  enableMultiSort: false, // 只允许同时排列一行
   getRowId: (row, index, parent) => {
     // 为每个连接创建一个标准化的唯一ID
     const endpointA = `${row.source_ip}:${row.source_port}`;
@@ -581,6 +623,13 @@ const table = useVueTable({
     return rowStr.includes(search);
   },
 });
+
+// 获取排序状态的显示
+const getConnectionSortIcon = (columnId: string): string => {
+  const sorting = table.getState().sorting;
+  if (sorting.length === 0 || sorting[0].id !== columnId) return '';
+  return sorting[0].desc ? '↓' : '↑';
+};
 </script>
 
 <template>
@@ -616,7 +665,7 @@ const table = useVueTable({
     <!-- 1. 聚合统计表格 -->
     <div>
       <!-- 聚合统计折叠栏 -->
-      <div @click="uiState.accordions.aggregation = !uiState.accordions.aggregation"
+      <div @click="toggleMainAccordion('aggregation')"
         class="py-2.5 border-b border-slate-700 mb-5 cursor-pointer select-none flex justify-between items-center group">
         <div class="flex items-center gap-4">
           <h3 class="text-lg font-semibold text-slate-200 group-hover:text-white">聚合统计</h3>
@@ -628,11 +677,16 @@ const table = useVueTable({
 
       <!-- 聚合统计内容 -->
       <div v-show="uiState.accordions.aggregation" class="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden">
-        <!-- 全局搜索框（单独一行，居右） -->
+        <!-- 全局搜索框（单独一行，居右）带清空按钮 -->
         <div class="px-4 py-3 border-b border-slate-700 flex justify-end">
           <div class="relative">
             <input v-model="aggregationFilter" placeholder="搜索 IP、流量、连接数..."
-              class="bg-slate-900 border border-slate-600 text-white text-xs px-3 py-1.5 rounded w-56 outline-none focus:border-blue-500" />
+              class="bg-slate-900 border border-slate-600 text-white text-xs px-3 py-1.5 pr-8 rounded w-56 outline-none focus:border-blue-500" />
+            <button v-if="aggregationFilter" @click="aggregationFilter = ''"
+              class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 text-xs w-4 h-4 flex items-center justify-center rounded hover:bg-slate-700 transition-colors"
+              title="清空搜索">
+              ×
+            </button>
           </div>
         </div>
         
@@ -694,7 +748,7 @@ const table = useVueTable({
             <tbody class="divide-y divide-slate-700">
               <!-- 局域网IP分组 -->
               <tr class="bg-slate-700/30 hover:bg-slate-700/50 transition-colors cursor-pointer"
-                @click="uiState.ipGroupCollapsed.lan = !uiState.ipGroupCollapsed.lan">
+                @click="toggleIpGroup('lan')">
                 <td colspan="7" class="px-3 py-3 text-left">
                   <div class="flex items-center justify-between">
                     <div class="flex items-center gap-2">
@@ -745,7 +799,7 @@ const table = useVueTable({
 
               <!-- 其他IP分组 -->
               <tr class="bg-slate-700/30 hover:bg-slate-700/50 transition-colors cursor-pointer"
-                @click="uiState.ipGroupCollapsed.other = !uiState.ipGroupCollapsed.other">
+                @click="toggleIpGroup('other')">
                 <td colspan="7" class="px-3 py-3 text-left">
                   <div class="flex items-center justify-between">
                     <div class="flex items-center gap-2">
@@ -802,7 +856,7 @@ const table = useVueTable({
     <!-- 2. 连接列表 -->
     <div>
       <!-- 连接列表折叠栏 -->
-      <div @click="uiState.accordions.connectionList = !uiState.accordions.connectionList"
+      <div @click="toggleMainAccordion('connectionList')"
         class="py-2.5 border-b border-slate-700 mb-5 cursor-pointer select-none flex justify-between items-center group">
         <div class="flex items-center gap-4">
           <h3 class="text-lg font-semibold text-slate-200 group-hover:text-white">连接列表</h3>
@@ -813,11 +867,16 @@ const table = useVueTable({
 
       <!-- 连接列表内容 -->
       <div v-show="uiState.accordions.connectionList" class="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden">
-        <!-- 全局搜索框（单独一行，居右） -->
+        <!-- 全局搜索框（单独一行，居右）带清空按钮 -->
         <div class="px-4 py-3 border-b border-slate-700 flex justify-end">
           <div class="relative">
             <input v-model="globalFilter" placeholder="全局搜索..."
-              class="bg-slate-900 border border-slate-600 text-white text-xs px-3 py-1.5 rounded w-56 outline-none focus:border-blue-500" />
+              class="bg-slate-900 border border-slate-600 text-white text-xs px-3 py-1.5 pr-8 rounded w-56 outline-none focus:border-blue-500" />
+            <button v-if="globalFilter" @click="globalFilter = ''"
+              class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 text-xs w-4 h-4 flex items-center justify-center rounded hover:bg-slate-700 transition-colors"
+              title="清空搜索">
+              ×
+            </button>
           </div>
         </div>
         
@@ -825,27 +884,25 @@ const table = useVueTable({
           <table class="w-full text-sm text-center border-collapse">
             <thead class="bg-slate-700/50 text-slate-300">
               <tr>
-                <th v-for="column in table.getHeaderGroups()[0].headers" :key="column.id"
-                  class="px-3 py-3 font-medium text-center whitespace-nowrap">
-                  <div class="flex flex-col gap-1 items-center">
-                    <div v-if="column.column.getCanSort()"
-                      class="flex items-center gap-1 cursor-pointer select-none hover:text-white" @click="() => {
-                        if (column.column.getCanSort()) {
-                          column.column.toggleSorting(undefined, column.column.getIsSorted() === false)
-                        }
-                      }">
-                      <FlexRender :render="column.column.columnDef.header" :props="column.getContext()" />
-                      {{ { asc: '↑', desc: '↓' }[column.column.getIsSorted() as string] || '' }}
-                    </div>
-                    <div v-else class="flex items-center gap-1">
-                      <FlexRender :render="column.column.columnDef.header" :props="column.getContext()" />
-                    </div>
-
-                    <!-- 列过滤器 -->
-                    <input v-if="column.column.getCanFilter()" :value="column.column.getFilterValue() ?? ''"
-                      @input="e => column.column.setFilterValue((e.target as HTMLInputElement).value)"
-                      :placeholder="`过滤 ${column.column.columnDef.header as string}...`"
-                      class="bg-slate-900 border border-slate-600 text-xs px-1 py-0.5 rounded w-24 text-slate-200 outline-none" />
+                <th v-for="header in table.getHeaderGroups()[0].headers" :key="header.id"
+                  @click="header.column.getCanSort() ? header.column.toggleSorting(undefined, header.column.getIsSorted() === false) : null"
+                  class="px-3 py-3 font-medium text-center whitespace-nowrap"
+                  :class="{ 
+                    'cursor-pointer select-none hover:text-white hover:bg-slate-700/50 transition-colors': header.column.getCanSort(),
+                  }">
+                  <div class="flex items-center justify-center gap-1">
+                    <FlexRender :render="header.column.columnDef.header" :props="header.getContext()" />
+                    <span v-if="header.column.getCanSort()" class="text-slate-400">
+                      {{ getConnectionSortIcon(header.column.id) }}
+                    </span>
+                  </div>
+                  <!-- 列过滤器 -->
+                  <div v-if="header.column.getCanFilter()" class="mt-1">
+                    <input :value="header.column.getFilterValue() ?? ''"
+                      @input="e => header.column.setFilterValue((e.target as HTMLInputElement).value)"
+                      :placeholder="`过滤 ${header.column.columnDef.header as string}...`"
+                      class="bg-slate-900 border border-slate-600 text-xs px-1 py-0.5 rounded w-24 text-slate-200 outline-none"
+                      @click.stop />
                   </div>
                 </th>
               </tr>
