@@ -9,6 +9,14 @@ const (
 	NetConnectionIndexState    = 5 // 只有 TCP 有
 )
 
+type IpAddressType string
+
+const (
+	IpAddressTypeLan     IpAddressType = "lan"
+	IpAddressTypeWan     IpAddressType = "wan"
+	IpAddressTypeUnknown IpAddressType = "unknown"
+)
+
 const (
 	BSecond  = "B/S"
 	KbSecond = "KB/S"
@@ -33,6 +41,7 @@ var (
 	JsonCacheKeyStaticMetric            = "StaticMetric"
 	JsonCacheKeyDynamicMetric           = "DynamicMetric"
 	JsonCacheKeyNetworkConnectionMetric = "NetworkConnectionMetric"
+	JsonCacheKeyAggregationTraffic      = "AggregationTraffic"
 )
 
 type CacheValue struct {
@@ -207,6 +216,25 @@ type StaticSystemMetric struct {
 	DeviceName string `json:"device_name"`
 	Arch       string `json:"arch"`
 	Timezone   string `json:"timezone"`
+}
+
+type AggregationTrafficMetric struct {
+	CaptureInterface string                      `json:"capture_interface"`
+	Details          []AggregationTrafficDetails `json:"details"`
+}
+
+type AggregationTrafficDetails struct {
+	Ip              string        `json:"ip"`
+	IpType          IpAddressType `json:"ip_type"`
+	Incoming        MetricUnit    `json:"incoming"`
+	Outgoing        MetricUnit    `json:"outgoing"`
+	TotalThroughput MetricUnit    `json:"total_throughput"`
+	TotalIncoming   MetricUnit    `json:"total_incoming"`
+	TotalOutgoing   MetricUnit    `json:"total_outgoing"`
+	TotalTraffic    MetricUnit    `json:"total_traffic"`
+	Tcp             int32         `json:"tcp"`
+	Udp             int32         `json:"udp"`
+	Other           int32         `json:"other"` // 指的是"当前时刻此ip的非tcp/udp连接数"
 }
 
 type MetricUnit struct {

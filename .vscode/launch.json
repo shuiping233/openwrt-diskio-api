@@ -21,6 +21,10 @@
                 // "60",
                 // "--network-connection-interval",
                 // "10",
+                // "--traffic-capture-interface-name",
+                // "eth1",
+                // "--traffic-key-expired-time",
+                // "10",
             ]
         }
     ]

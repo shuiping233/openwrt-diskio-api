@@ -4,6 +4,7 @@
 package metric
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"sync"
@@ -21,11 +22,27 @@ type BackgroundService struct {
 	UpdateStaticMetricInterval             uint
 	UpdateDynamicMetricInterval            uint
 	UpdateNetworkConnectionDetailsInterval uint
+	TrafficCaptureInterfaceName            string
+	TrafficKeyExpiredTime                  time.Duration
 	updatingStatusMap                      sync.Map
 	UpdateEventChan                        chan string
 	wg                                     sync.WaitGroup
+	ebpfService                            *EbpfNetTrafficService
 }
 
+func (b *BackgroundService) SetConfig(
+	updateStaticMetricInterval uint,
+	updateDynamicMetricInterval uint,
+	updateNetworkConnectionDetailsInterval uint,
+	trafficCaptureInterfaceName string,
+	trafficKeyExpiredTime time.Duration,
+) {
+	b.UpdateStaticMetricInterval = updateStaticMetricInterval
+	b.UpdateDynamicMetricInterval = updateDynamicMetricInterval
+	b.UpdateNetworkConnectionDetailsInterval = updateNetworkConnectionDetailsInterval
+	b.TrafficCaptureInterfaceName = trafficCaptureInterfaceName
+	b.TrafficKeyExpiredTime = trafficKeyExpiredTime
+}
 func (b *BackgroundService) SetUpdateStaticMetricInterval(interval uint) {
 	b.UpdateStaticMetricInterval = interval
 }
@@ -54,50 +71,87 @@ func (b *BackgroundService) UpdateStaticMetric() {
 		time.Duration(updateInterval)*time.Second,
 		jsonBytes,
 	)
+}
+
+func (b *BackgroundService) UpdateAggregationTrafficMetric() {
+	aggregationTrafficMetric := b.ebpfService.GetAggregationTrafficMetric()
+	jsonBytes, err := json.Marshal(aggregationTrafficMetric)
+	if err != nil {
+		log.Printf("AggregationTrafficMetric json marshal error : %s", err)
+	}
+	b.setJsonBytes(
+		model.JsonCacheKeyAggregationTraffic,
+		time.Duration(1)*time.Second,
+		jsonBytes,
+	)
 
 }
-func (b *BackgroundService) UpdateDynamicMetric() {
-	updateInterval := b.UpdateDynamicMetricInterval
+
+func (b *BackgroundService) RunDynamicMetricService(ctx context.Context) {
 	diskSnap := model.DiskSnap{}
 	cpuSnap := model.CpuSnap{}
 	netSnap := model.NetSnap{
 		Interfaces: map[string]model.NetSnapUnit{},
 	}
+	updateInterval := b.UpdateDynamicMetricInterval
+	ticker := time.NewTicker(time.Duration(updateInterval) * time.Second)
+	defer ticker.Stop()
+
 	prevTime := time.Now()
 
 	for {
-		currTime := time.Now()
-		elapsed := currTime.Sub(prevTime).Seconds()
-		if elapsed <= 0 {
-			continue
+		select {
+		case <-ctx.Done():
+			// 这里没东西要释放,退出即可
+			return
+		case <-ticker.C:
+			currTime := time.Now()
+			elapsed := currTime.Sub(prevTime).Seconds()
+			if elapsed <= 0 {
+				continue
+			}
+			networkMetric := ReadNetworkMetric(b.Reader, &netSnap, updateInterval)
+			cpuMetric := ReadCpuMetric(b.Reader, &cpuSnap)
+			storageMetric := ReadStorageMetric(b.Reader, diskSnap, updateInterval)
+			memoryMetric := ReadMemoryMetric(b.Reader)
+			systemMetric := ReadSystemMetric(b.Reader)
+
+			jsonBytes, err := json.Marshal(&model.DynamicMetric{
+				Cpu:     cpuMetric,
+				Memory:  memoryMetric,
+				Network: networkMetric,
+				Storage: storageMetric,
+				System:  systemMetric,
+			})
+			if err != nil {
+				log.Printf("DynamicMetric json marshal error : %s", err)
+			}
+
+			b.setJsonBytes(
+				model.JsonCacheKeyDynamicMetric,
+				time.Duration(updateInterval)*time.Second,
+				jsonBytes,
+			)
+
+			prevTime = currTime
 		}
-		networkMetric := ReadNetworkMetric(b.Reader, &netSnap, updateInterval)
-		cpuMetric := ReadCpuMetric(b.Reader, &cpuSnap)
-		storageMetric := ReadStorageMetric(b.Reader, diskSnap, updateInterval)
-		memoryMetric := ReadMemoryMetric(b.Reader)
-		systemMetric := ReadSystemMetric(b.Reader)
-
-		jsonBytes, err := json.Marshal(&model.DynamicMetric{
-			Cpu:     cpuMetric,
-			Memory:  memoryMetric,
-			Network: networkMetric,
-			Storage: storageMetric,
-			System:  systemMetric,
-		})
-		if err != nil {
-			log.Fatalf("DynamicMetric json marshal error : %s", err)
-		}
-
-		b.setJsonBytes(
-			model.JsonCacheKeyDynamicMetric,
-			time.Duration(updateInterval)*time.Second,
-			jsonBytes,
-		)
-
-		prevTime = currTime
-
-		time.Sleep(time.Duration(updateInterval) * time.Second)
 	}
+}
+
+func (b *BackgroundService) RunAggregationTrafficService(ctx context.Context) {
+	if b.ebpfService == nil {
+		b.ebpfService = NewEbpfNetTrafficService(
+			b.TrafficKeyExpiredTime,
+		)
+	}
+	if err := b.ebpfService.InitEbpfInterfaceDevice(b.TrafficCaptureInterfaceName); err != nil {
+		log.Fatalf("init ebpf interface device error : %s", err)
+	}
+	b.ebpfService.Run(ctx)
+}
+
+func (b *BackgroundService) AggregationTrafficServiceActiveSignal() {
+	b.ebpfService.ActiveSignal()
 }
 
 func (b *BackgroundService) UpdateNetworkConnectionDetails() {
@@ -113,7 +167,7 @@ func (b *BackgroundService) UpdateNetworkConnectionDetails() {
 		log.Fatalf("NetworkConnectionDetails json marshal error : %s", err)
 	}
 	b.setJsonBytes(
-		model.JsonCacheKeyNetworkConnectionMetric,
+		model.JsonCacheKeyAggregationTraffic,
 		time.Duration(updateInterval)*time.Second,
 		jsonBytes,
 	)
@@ -124,13 +178,14 @@ func (b *BackgroundService) Worker(index int) {
 	defer b.wg.Done()
 	for key := range b.UpdateEventChan {
 		switch key {
-		// case model.JsonCacheKeyDynamicMetric:
-		// 	b.UpdateDynamicMetric()
 		case model.JsonCacheKeyStaticMetric:
 			b.UpdateStaticMetric()
 		case model.JsonCacheKeyNetworkConnectionMetric:
 			b.UpdateNetworkConnectionDetails()
+		case model.JsonCacheKeyAggregationTraffic:
+			b.UpdateAggregationTrafficMetric()
 		}
+
 		b.updatingStatusMap.Delete(key)
 	}
 	log.Printf("worker %d exit", index)
@@ -177,5 +232,6 @@ func (b *BackgroundService) Close() {
 	if b.UpdateEventChan != nil {
 		close(b.UpdateEventChan)
 	}
+	b.ebpfService.Close()
 	b.wg.Wait()
 }

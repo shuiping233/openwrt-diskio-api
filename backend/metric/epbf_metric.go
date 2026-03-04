@@ -3,26 +3,22 @@
 package metric
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net"
-	"os"
-	"os/signal"
 	"sort"
 	"strings"
-	"syscall"
 	"time"
 
+	"openwrt-diskio-api/backend/model"
 	bpf "openwrt-diskio-api/backend/pkg/ebpf"
+	"openwrt-diskio-api/backend/utils"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/rlimit"
 	"github.com/vishvananda/netlink"
 	"golang.org/x/sys/unix"
-)
-
-var (
-	targetInterface = "eth1"
 )
 
 type IPMetrics struct {
@@ -33,49 +29,89 @@ type IPMetrics struct {
 	TotalDownload uint64
 }
 
-func main() {
+type EbpfNetTrafficService struct {
+	captureInterface string
+	keyExpiredTime   time.Duration
+	activeChan       chan struct{}
+	objs             *bpf.BpfObjects
+	link             netlink.Link
+	metricsMap       map[uint32]*IPMetrics
+}
+
+func NewEbpfNetTrafficService(keyExpiredTime time.Duration) *EbpfNetTrafficService {
+	return &EbpfNetTrafficService{
+		keyExpiredTime: keyExpiredTime,
+		activeChan:     make(chan struct{}, 1),
+		metricsMap:     make(map[uint32]*IPMetrics),
+	}
+}
+
+func (svc *EbpfNetTrafficService) InitEbpfInterfaceDevice(targetInterface string) error {
+	svc.captureInterface = targetInterface
 	if err := rlimit.RemoveMemlock(); err != nil {
-		log.Fatalf("无法解除内存限制: %v", err)
+		return fmt.Errorf("无法解除内存限制: %w", err)
 	}
 
 	objs := bpf.BpfObjects{}
 	if err := bpf.LoadBpfObjects(&objs, nil); err != nil {
-		log.Fatalf("加载 BPF 对象失败: %v", err)
+		return fmt.Errorf("加载 BPF 对象失败: %w", err)
 	}
-	defer objs.Close()
 
 	link, err := netlink.LinkByName(targetInterface)
 	if err != nil {
-		log.Fatalf("🔴 错误: 未找到网卡 %s: %v", targetInterface, err)
+		return fmt.Errorf("🔴 错误: 未找到网卡 %s: %w", targetInterface, err)
 	}
 
 	if err := attachTCObjects(link, objs.CountFlow.FD()); err != nil {
-		log.Fatalf("❌ 挂载网卡 %s 失败: %v", targetInterface, err)
+		log.Fatalf("❌ 挂载网卡 %s 失败: %s", targetInterface, err)
 	}
 	fmt.Printf("✅ 正在监控局域网流量: %s\n", targetInterface)
+	startCapture(&objs)
+	svc.link = link
+	svc.objs = &objs
 
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
+	return nil
+}
 
-	StartCapture(&objs)
+func (svc *EbpfNetTrafficService) Run(ctx context.Context) {
+
+	objs := svc.objs
 
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
+	keyExpiredTime := svc.keyExpiredTime
 	lastSnapshots := make(map[bpf.BpfFlowKey]uint64)
-	metricsMap := make(map[uint32]*IPMetrics)
+	metricsMap := svc.metricsMap
+	lastRequestTime := time.Now()
 
 	for {
 		select {
-		case <-sig:
-			fmt.Println("\n正在清理并退出...")
-			StopCapture(&objs)
-			cleanUpTC(link)
+		case <-ctx.Done():
+			svc.Close()
 			return
 
+		case <-svc.activeChan:
+			// 1. 收到接口请求信号，刷新最后活跃时间
+			lastRequestTime = time.Now()
+			if !isCapturing(objs) {
+				startCapture(objs)
+			}
+
 		case <-ticker.C:
+			if isCapturing(objs) {
+				// 如果超过 n 秒没收到新请求，则关停以节省资源
+				if time.Since(lastRequestTime) > keyExpiredTime {
+					stopCapture(objs)
+					clearFlowMap(objs.FlowMap)
+					clear(metricsMap)
+					clear(lastSnapshots)
+					continue
+				}
+			}
+
 			nowKtime := getKtimeNS()
-			timeout := uint64(10 * time.Second) // 10秒无流量老化
+			timeout := uint64(keyExpiredTime) // n秒无流量老化
 
 			// 重置每秒速率
 			for _, m := range metricsMap {
@@ -107,38 +143,77 @@ func main() {
 				}
 				lastSnapshots[currentKey] = currentBytes
 
-				aggregate(key, delta, metricsMap)
+				trafficAggregate(key, delta, metricsMap)
 			}
-
-			drawUI(metricsMap)
 		}
 	}
 }
-
-func aggregate(key bpf.BpfFlowKey, delta uint64, res map[uint32]*IPMetrics) {
-	rateKB := float64(delta) / 1024.0
-
-	// 只统计局域网段 IP 的流量
-	if isPrivateIP(key.SrcIp) {
-		m := getOrCreateMetrics(key.SrcIp, res)
-		m.UploadRate += rateKB
-		m.TotalUpload += delta
-	}
-
-	if isPrivateIP(key.DstIp) {
-		m := getOrCreateMetrics(key.DstIp, res)
-		m.DownloadRate += rateKB
-		m.TotalDownload += delta
-	}
+func (svc *EbpfNetTrafficService) ActiveSignal() {
+	svc.activeChan <- struct{}{}
 }
 
-func getOrCreateMetrics(ip uint32, res map[uint32]*IPMetrics) *IPMetrics {
-	if m, ok := res[ip]; ok {
-		return m
+func (svc *EbpfNetTrafficService) Close() {
+	fmt.Println("\n正在清理并退出...")
+	stopCapture(svc.objs)
+	cleanUpTC(svc.link)
+	svc.objs.Close()
+}
+func (svc *EbpfNetTrafficService) GetAggregationTrafficMetric() model.AggregationTrafficMetric {
+	metricsMap := svc.metricsMap
+	result := model.AggregationTrafficMetric{
+		CaptureInterface: svc.captureInterface,
+		Details:          make([]model.AggregationTrafficDetails, len(metricsMap)),
 	}
-	m := &IPMetrics{IP: formatIP(ip)}
-	res[ip] = m
-	return m
+
+	for ip, value := range metricsMap {
+		ipStr := formatIP(ip)
+		rate, unit := utils.ConvertBytes(value.DownloadRate, model.BSecond)
+		incoming := model.MetricUnit{
+			Value: rate,
+			Unit:  unit,
+		}
+		rate, unit = utils.ConvertBytes(value.UploadRate, model.BSecond)
+		outgoing := model.MetricUnit{
+			Value: rate,
+			Unit:  unit,
+		}
+		rate, unit = utils.ConvertBytes(value.DownloadRate+value.UploadRate, model.BSecond)
+		totalThroughput := model.MetricUnit{
+			Value: rate,
+			Unit:  unit,
+		}
+
+		total, unit := utils.ConvertBytes(float64(value.TotalDownload), model.Byte)
+		totalIncoming := model.MetricUnit{
+			Value: total,
+			Unit:  unit,
+		}
+		total, unit = utils.ConvertBytes(float64(value.TotalUpload), model.Byte)
+		totalOutgoing := model.MetricUnit{
+			Value: total,
+			Unit:  unit,
+		}
+		total, unit = utils.ConvertBytes(float64(value.TotalDownload+value.TotalUpload), model.Byte)
+		totalTraffic := model.MetricUnit{
+			Value: total,
+			Unit:  unit,
+		}
+
+		result.Details = append(result.Details, model.AggregationTrafficDetails{
+			Ip:              ipStr,
+			IpType:          model.IpAddressTypeLan, // TODO 先写死,因为其他类型的ip流量抓取还没做
+			Incoming:        incoming,
+			Outgoing:        outgoing,
+			TotalThroughput: totalThroughput,
+			TotalIncoming:   totalIncoming,
+			TotalOutgoing:   totalOutgoing,
+			TotalTraffic:    totalTraffic,
+			Tcp:             -1, // TODO 先这样,后面会找NetworkConnection里的值统计好之后再填进去
+			Udp:             -1, // TODO 先这样,后面会找NetworkConnection里的值统计好之后再填进去
+			Other:           -1, // TODO 先这样,后面会找NetworkConnection里的值统计好之后再填进去
+		})
+	}
+	return result
 }
 
 func drawUI(metrics map[uint32]*IPMetrics) {
@@ -177,7 +252,31 @@ func drawUI(metrics map[uint32]*IPMetrics) {
 	}
 }
 
-// --- 基础辅助函数 ---
+func trafficAggregate(key bpf.BpfFlowKey, delta uint64, res map[uint32]*IPMetrics) {
+	rateKB := float64(delta) / 1024.0
+
+	// 只统计局域网段 IP 的流量
+	if isPrivateIP(key.SrcIp) {
+		m := getOrCreateMetrics(key.SrcIp, res)
+		m.UploadRate += rateKB
+		m.TotalUpload += delta
+	}
+
+	if isPrivateIP(key.DstIp) {
+		m := getOrCreateMetrics(key.DstIp, res)
+		m.DownloadRate += rateKB
+		m.TotalDownload += delta
+	}
+}
+
+func getOrCreateMetrics(ip uint32, res map[uint32]*IPMetrics) *IPMetrics {
+	if m, ok := res[ip]; ok {
+		return m
+	}
+	m := &IPMetrics{IP: formatIP(ip)}
+	res[ip] = m
+	return m
+}
 
 func getKtimeNS() uint64 {
 	var ts unix.Timespec
@@ -239,14 +338,39 @@ func cleanUpTC(link netlink.Link) {
 	}
 }
 
-func StartCapture(objs *bpf.BpfObjects) {
-	var key uint32 = 0
-	var val uint32 = 1
+func startCapture(objs *bpf.BpfObjects) {
+	log.Println("Enable ebpf network traffic capture")
+	key := uint32(0)
+	val := uint32(1)
 	objs.ConfigMap.Update(&key, &val, ebpf.UpdateAny)
 }
 
-func StopCapture(objs *bpf.BpfObjects) {
-	var key uint32 = 0
-	var val uint32 = 0
+func stopCapture(objs *bpf.BpfObjects) {
+	log.Println("Disable ebpf network traffic capture")
+	key := uint32(0)
+	val := uint32(0)
 	objs.ConfigMap.Update(&key, &val, ebpf.UpdateAny)
+}
+
+func isCapturing(objs *bpf.BpfObjects) bool {
+	key := uint32(0)
+	val := uint32(0)
+
+	err := objs.ConfigMap.Lookup(&key, &val)
+	if err != nil {
+		return false
+	}
+	return val == 1
+}
+
+func clearFlowMap(m *ebpf.Map) {
+	var key bpf.BpfFlowKey
+	iter := m.Iterate()
+	// 边读边删，这是 eBPF Map 推荐的清空方式
+	for iter.Next(&key, nil) {
+		if err := m.Delete(key); err != nil {
+			// 忽略已经不存在的 key（并发可能导致这个）
+			continue
+		}
+	}
 }

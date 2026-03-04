@@ -17,6 +17,7 @@ import (
 	"os/signal"
 	"strconv"
 	"syscall"
+	"time"
 
 	frontend "openwrt-diskio-api"
 	"openwrt-diskio-api/backend/metric"
@@ -25,7 +26,7 @@ import (
 	"github.com/spf13/afero"
 )
 
-const workerNumber = 2
+const workerNumber = 3
 
 var (
 	reader     = metric.FsReader{Fs: afero.NewOsFs()}
@@ -57,6 +58,7 @@ func DynamicMetricHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Write(jsonBytes)
 }
+
 func NetworkConnectionMetricHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "only GET", http.StatusMethodNotAllowed)
@@ -77,6 +79,7 @@ func NetworkConnectionMetricHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Write(jsonBytes)
 }
+
 func StaticMetricHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "only GET", http.StatusMethodNotAllowed)
@@ -96,6 +99,26 @@ func StaticMetricHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Write(jsonBytes)
 }
+func AggregationTrafficHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "only GET", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+
+	jsonBytes := background.GetJsonBytes(model.JsonCacheKeyAggregationTraffic)
+	if len(jsonBytes) == 0 {
+		var err error
+		jsonBytes, err = json.Marshal(&model.AggregationTrafficMetric{})
+		if err != nil {
+			errMsg := fmt.Sprintf("json marshal error : %s", err.Error())
+			http.Error(w, errMsg, http.StatusInternalServerError)
+			return
+		}
+	}
+	w.Write(jsonBytes)
+	background.AggregationTrafficServiceActiveSignal()
+}
 
 func PrettyExit(httpServer *http.Server) {
 	sigChan := make(chan os.Signal, 1)
@@ -112,11 +135,13 @@ func PrettyExit(httpServer *http.Server) {
 func main() {
 
 	var (
-		host                      = flag.String("host", "127.0.0.1", "listen host")
-		port                      = flag.Int("port", 8080, "listen port")
-		dynamicMetricInterval     = flag.Uint("dynamic-metric-interval", 1, " metric update interval")
-		networkConnectionInterval = flag.Uint("network-connection-interval", 10, " network connection details update interval")
-		staticMetricInterval      = flag.Uint("static-metric-interval", 60, " metric update interval")
+		host                        = flag.String("host", "127.0.0.1", "listen host")
+		port                        = flag.Int("port", 8080, "listen port")
+		dynamicMetricInterval       = flag.Uint("dynamic-metric-interval", 1, " metric update interval")
+		networkConnectionInterval   = flag.Uint("network-connection-interval", 10, " network connection details update interval")
+		staticMetricInterval        = flag.Uint("static-metric-interval", 60, " metric update interval")
+		trafficCaptureInterfaceName = flag.String("traffic-capture-interface-name", "br-lan", "traffic capture interface name , only use on realtime traffic capture and should be input LAN interface")
+		trafficKeyExpiredTime       = flag.Duration("traffic-key-expired-time", 20*time.Second, " metric update interval")
 	)
 	flag.Parse()
 
@@ -134,15 +159,32 @@ func main() {
 	log.Printf("dynamicMetricInterval : %v", *dynamicMetricInterval)
 	log.Printf("networkConnectionInterval : %v", *networkConnectionInterval)
 	log.Printf("staticMetricInterval : %v", *staticMetricInterval)
+	log.Printf("trafficCaptureInterfaceName : %v", *trafficCaptureInterfaceName)
+	log.Printf("trafficKeyExpiredTime : %v", *trafficKeyExpiredTime)
 
-	background.SetUpdateDynamicMetricInterval(*dynamicMetricInterval)
-	background.SetUpdateNetworkConnectionDetailsInterval(*networkConnectionInterval)
-	background.SetUpdateStaticMetricInterval(*staticMetricInterval)
+	background.SetConfig(
+		*staticMetricInterval,
+		*dynamicMetricInterval,
+		*networkConnectionInterval,
+		*trafficCaptureInterfaceName,
+		*trafficKeyExpiredTime,
+	)
 
 	background.UpdateStaticMetric()
 	background.UpdateNetworkConnectionDetails()
 
-	go background.UpdateDynamicMetric()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-sig
+		fmt.Println("\n Receive ctrl+c signal , closing service...")
+		cancel()
+	}()
+
+	go background.RunDynamicMetricService(ctx)
+	go background.RunAggregationTrafficService(ctx)
 	for index := range workerNumber {
 		go background.Worker(index)
 	}
@@ -153,11 +195,13 @@ func main() {
 	http.HandleFunc("/metric/dynamic", DynamicMetricHandler)
 	http.HandleFunc("/metric/network_connection", NetworkConnectionMetricHandler)
 	http.HandleFunc("/metric/static", StaticMetricHandler)
+	http.HandleFunc("/metric/aggregation_traffic", AggregationTrafficHandler)
 
 	log.Printf("listen http://%s/", addr)
 	log.Printf("Interface url : http://%s/metric/dynamic", addr)
 	log.Printf("Interface url : http://%s/metric/network_connection", addr)
 	log.Printf("Interface url : http://%s/metric/static", addr)
+	log.Printf("Interface url : http://%s/metric/aggregation_traffic", addr)
 	if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("listen error: %s\n", err)
 	}
