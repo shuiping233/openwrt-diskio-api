@@ -5,6 +5,7 @@ import {
   getCoreRowModel,
   getSortedRowModel,
   getFilteredRowModel,
+  getPaginationRowModel,
   FlexRender,
   createColumnHelper,
   SortingState,
@@ -15,6 +16,7 @@ import { compressIPv6 } from '../utils/ipv6';
 import { convertToBytes, BytesFixed, formatIOBytes, normalizeToBytes, formatDataBytes } from '../utils/convert';
 import { useToast } from '../useToast';
 import { useDatabase } from '../useDatabase';
+import { useSettings } from '../useSettings';
 
 // Props
 const props = defineProps<{
@@ -607,6 +609,70 @@ const columns = [
   }),
 ];
 
+// ================= 分页相关配置 =================
+const { settings, setConfig } = useSettings();
+
+// 分页大小选项
+const pageSizeOptions = [20, 50, 100, 500, 1000];
+
+// 分页大小 - 从配置读取
+const pageSize = ref(settings.network_table_page_size || pageSizeOptions[0]);
+
+// 是否是自定义分页大小
+const isCustomPageSize = ref(!pageSizeOptions.includes(pageSize.value));
+
+// 自定义分页大小输入值
+const customPageSize = ref(isCustomPageSize.value ? String(pageSize.value) : '');
+
+// 当前页码（从0开始）
+const currentPage = ref(0);
+
+// 当配置加载完成后，同步分页大小
+watch(() => settings.network_table_page_size, (newValue) => {
+  if (newValue && newValue !== pageSize.value) {
+    pageSize.value = newValue;
+    isCustomPageSize.value = !pageSizeOptions.includes(newValue);
+    if (isCustomPageSize.value) {
+      customPageSize.value = String(newValue);
+    }
+  }
+}, { immediate: true });
+
+// 处理分页大小变更
+const handlePageSizeChange = async (value: string) => {
+  const newSize = parseInt(value, 10);
+  if (!isNaN(newSize) && newSize > 0) {
+    pageSize.value = newSize;
+    currentPage.value = 0; // 重置到第一页
+    await setConfig('network_table_page_size', newSize);
+  }
+};
+
+// 处理自定义分页大小变更
+const handleCustomPageSizeChange = async () => {
+  const value = parseInt(customPageSize.value, 10);
+  if (!isNaN(value) && value > 0) {
+    pageSize.value = value;
+    currentPage.value = 0;
+    await setConfig('network_table_page_size', value);
+  }
+};
+
+// 切换到预设分页大小
+const switchToPresetSize = async (size: number) => {
+  pageSize.value = size;
+  isCustomPageSize.value = false;
+  customPageSize.value = '';
+  currentPage.value = 0;
+  await setConfig('network_table_page_size', size);
+};
+
+// 受控分页状态
+const pagination = ref({
+  pageSize: pageSize.value,
+  pageIndex: 0,
+});
+
 // 初始状态 - 只允许同时排列一行
 const initialSorting = [{ id: 'traffic', desc: true }] as SortingState;
 
@@ -616,6 +682,7 @@ const table = useVueTable({
   getCoreRowModel: getCoreRowModel(),
   getSortedRowModel: getSortedRowModel(),
   getFilteredRowModel: getFilteredRowModel(),
+  getPaginationRowModel: getPaginationRowModel(),
   enableMultiSort: false, // 只允许同时排列一行
   getRowId: (row, index, parent) => {
     // 为每个连接创建一个标准化的唯一ID
@@ -627,7 +694,10 @@ const table = useVueTable({
     // 添加一个稳定的唯一标识符，基于连接信息和原始索引
     return `${baseId}-${row.traffic.value}-${row.packets}-${index}`;
   },
-  initialState: {
+  state: {
+    get pagination() {
+      return pagination.value;
+    },
     sorting: initialSorting,
     columnFilters: [],
     globalFilter: globalFilter.value,
@@ -637,6 +707,22 @@ const table = useVueTable({
     const rowStr = Object.values(row.original).join(' ').toLowerCase();
     return rowStr.includes(search);
   },
+  onPaginationChange: (updater) => {
+    const newPagination = typeof updater === 'function'
+      ? updater(pagination.value)
+      : updater;
+    pagination.value = newPagination;
+    currentPage.value = newPagination.pageIndex;
+  },
+});
+
+// 同步分页大小到 table
+watch(pageSize, (newSize) => {
+  pagination.value = {
+    ...pagination.value,
+    pageSize: newSize,
+    pageIndex: 0,
+  };
 });
 
 // 获取排序状态的显示
@@ -937,16 +1023,61 @@ const getConnectionSortIcon = (columnId: string): string => {
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-700">
-              <tr v-for="row in table.getRowModel().rows" :key="row.id" class="hover:bg-slate-700/30 transition-colors">
+              <tr v-for="row in table.getPaginationRowModel().rows" :key="row.id"
+                class="hover:bg-slate-700/30 transition-colors">
                 <td v-for="cell in row.getVisibleCells()" :key="cell.id" class="px-3 py-2 text-center">
                   <FlexRender :render="cell.column.columnDef.cell" :props="cell.getContext()" />
                 </td>
               </tr>
-              <tr v-if="table.getRowModel().rows.length === 0">
+              <tr v-if="table.getPaginationRowModel().rows.length === 0">
                 <td colspan="7" class="px-5 py-8 text-center text-slate-500">暂无匹配数据</td>
               </tr>
             </tbody>
           </table>
+        </div>
+
+        <!-- 分页控件 -->
+        <div class="px-4 py-3 border-t border-slate-700 flex flex-wrap items-center justify-between gap-3">
+          <!-- 左侧：分页大小选择器 -->
+          <div class="flex items-center gap-2">
+            <span class="text-xs text-slate-400">每页显示：</span>
+            <!-- 预设分页大小按钮 -->
+            <button v-for="size in pageSizeOptions" :key="size" @click="switchToPresetSize(size)"
+              class="text-xs px-2 py-1 rounded transition-colors" :class="{
+                'bg-blue-600 text-white': !isCustomPageSize && pageSize === size,
+                'bg-slate-700 text-slate-300 hover:bg-slate-600': isCustomPageSize || pageSize !== size
+              }">
+              {{ size }}
+            </button>
+            <!-- 自定义输入框 -->
+            <div class="flex items-center gap-1">
+              <input v-model="customPageSize" type="number" min="1" placeholder="自定义"
+                class="w-16 text-xs px-2 py-1 rounded bg-slate-900 border border-slate-600 text-white outline-none focus:border-blue-500 text-center"
+                :class="{ 'border-blue-500': isCustomPageSize }" @change="handleCustomPageSizeChange"
+                @keyup.enter="handleCustomPageSizeChange" />
+              <span class="text-xs text-slate-400">条</span>
+            </div>
+          </div>
+
+          <!-- 右侧：页码导航 -->
+          <div class="flex items-center gap-3">
+            <span class="text-xs text-slate-400">
+              共 {{ table.getPageCount() }} 页，{{ table.getFilteredRowModel().rows.length }} 条记录
+            </span>
+            <div class="flex items-center gap-1">
+              <button @click="table.previousPage()" :disabled="!table.getCanPreviousPage()"
+                class="text-xs px-3 py-1 rounded bg-slate-700 text-slate-300 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                上一页
+              </button>
+              <span class="text-xs px-3 py-1 text-slate-200">
+                {{ currentPage + 1 }} / {{ table.getPageCount() || 1 }}
+              </span>
+              <button @click="table.nextPage()" :disabled="!table.getCanNextPage()"
+                class="text-xs px-3 py-1 rounded bg-slate-700 text-slate-300 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                下一页
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
