@@ -73,20 +73,6 @@ func (b *BackgroundService) UpdateStaticMetric() {
 	)
 }
 
-func (b *BackgroundService) UpdateAggregationTrafficMetric() {
-	aggregationTrafficMetric := b.ebpfService.GetAggregationTrafficMetric()
-	jsonBytes, err := json.Marshal(aggregationTrafficMetric)
-	if err != nil {
-		log.Printf("AggregationTrafficMetric json marshal error : %s", err)
-	}
-	b.setJsonBytes(
-		model.JsonCacheKeyAggregationTraffic,
-		time.Duration(1)*time.Second,
-		jsonBytes,
-	)
-
-}
-
 func (b *BackgroundService) RunDynamicMetricService(ctx context.Context) {
 	diskSnap := model.DiskSnap{}
 	cpuSnap := model.CpuSnap{}
@@ -147,13 +133,27 @@ func (b *BackgroundService) RunAggregationTrafficService(ctx context.Context) {
 	if err := b.ebpfService.InitEbpfInterfaceDevice(b.TrafficCaptureInterfaceName); err != nil {
 		log.Fatalf("init ebpf interface device error : %s", err)
 	}
-	b.ebpfService.Run(ctx)
+	go b.ebpfService.Run(ctx)
+	b.UpdateAggregationTrafficMetric()
 }
 
 func (b *BackgroundService) AggregationTrafficServiceActiveSignal() {
 	b.ebpfService.ActiveSignal()
 }
 
+func (b *BackgroundService) UpdateAggregationTrafficMetric() {
+	aggregationTrafficMetric := b.ebpfService.GetAggregationTrafficMetric()
+	jsonBytes, err := json.Marshal(aggregationTrafficMetric)
+	if err != nil {
+		log.Printf("AggregationTrafficMetric json marshal error : %s", err)
+	}
+	b.setJsonBytes(
+		model.JsonCacheKeyAggregationTraffic,
+		time.Duration(1)*time.Second,
+		jsonBytes,
+	)
+
+}
 func (b *BackgroundService) UpdateNetworkConnectionDetails() {
 	updateInterval := b.UpdateNetworkConnectionDetailsInterval
 
@@ -167,7 +167,7 @@ func (b *BackgroundService) UpdateNetworkConnectionDetails() {
 		log.Fatalf("NetworkConnectionDetails json marshal error : %s", err)
 	}
 	b.setJsonBytes(
-		model.JsonCacheKeyAggregationTraffic,
+		model.JsonCacheKeyNetworkConnectionMetric,
 		time.Duration(updateInterval)*time.Second,
 		jsonBytes,
 	)

@@ -3,10 +3,13 @@ package utils
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"openwrt-diskio-api/backend/model"
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/vishvananda/netlink"
 )
 
 // If "unit" is unknown unit , return unchanged.
@@ -144,4 +147,25 @@ func All(bb []bool) bool {
 
 func Any(bb []bool) bool {
 	return slices.Contains(bb, true)
+}
+
+// GetInterfaceIpv4CIDR 获取指定网卡的 CIDR 字符串 (例如 "192.168.1.1/24")
+func GetInterfaceIpv4CIDR(interfaceName string) (string, error) {
+	link, err := netlink.LinkByName(interfaceName)
+	if err != nil {
+		return "", fmt.Errorf("Network interface %q not found: %v", interfaceName, err)
+	}
+
+	addrList, err := netlink.AddrList(link, netlink.FAMILY_V4)
+	if err != nil {
+		return "", fmt.Errorf("Get Network interface CIDR failed: %v", err)
+	}
+
+	if len(addrList) == 0 {
+		return "", fmt.Errorf("Network interface %q missing ipv4 address", interfaceName)
+	}
+
+	// 默认取第一个地址
+	// addrList[0].IPNet 包含 IP 和 Mask
+	return addrList[0].IPNet.String(), nil
 }
