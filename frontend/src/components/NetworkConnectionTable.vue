@@ -818,34 +818,40 @@ const getConnectionSortIcon = (columnId: string): string => {
                   <span class="font-mono text-slate-300">{{ ipStats.ip }}</span>
                 </td>
                 <td class="px-3 py-2 text-center">
-                  <span class="font-mono text-slate-200">{{ ipStats.totalThroughput.value.toFixed(2) }} {{
-                    ipStats.totalThroughput.unit
+                  <span class="font-mono text-slate-200">{{
+                    BytesFixed(ipStats.totalThroughput.value, ipStats.totalThroughput.unit) }} {{
+                      ipStats.totalThroughput.unit
                     }}</span>
                 </td>
                 <td class="px-3 py-2 text-center">
-                  <span class="font-mono text-orange-400">{{ ipStats.uploadThroughput.value.toFixed(2) }} {{
-                    ipStats.uploadThroughput.unit
-                  }}</span>
-                </td>
-                <td class="px-3 py-2 text-center">
-                  <span class="font-mono text-cyan-400">{{ ipStats.downloadThroughput.value.toFixed(2) }} {{
-                    ipStats.downloadThroughput.unit
-                  }}</span>
-                </td>
-                <td class="px-3 py-2 text-center">
-                  <span class="font-mono text-slate-200">{{ ipStats.totalTraffic.value.toFixed(2) }} {{
-                    ipStats.totalTraffic.unit
+                  <span class="font-mono text-orange-400">{{
+                    BytesFixed(ipStats.uploadThroughput.value, ipStats.uploadThroughput.unit) }} {{
+                      ipStats.uploadThroughput.unit
                     }}</span>
                 </td>
                 <td class="px-3 py-2 text-center">
-                  <span class="font-mono text-orange-400">{{ ipStats.totalUpload.value.toFixed(2) }} {{
-                    ipStats.totalUpload.unit
-                  }}</span>
+                  <span class="font-mono text-cyan-400">{{
+                    BytesFixed(ipStats.downloadThroughput.value, ipStats.downloadThroughput.unit) }} {{
+                      ipStats.downloadThroughput.unit
+                    }}</span>
                 </td>
                 <td class="px-3 py-2 text-center">
-                  <span class="font-mono text-cyan-400">{{ ipStats.totalDownload.value.toFixed(2) }} {{
-                    ipStats.totalDownload.unit
-                  }}</span>
+                  <span class="font-mono text-slate-200">{{
+                    BytesFixed(ipStats.totalTraffic.value, ipStats.totalTraffic.unit) }} {{
+                      ipStats.totalTraffic.unit
+                    }}</span>
+                </td>
+                <td class="px-3 py-2 text-center">
+                  <span class="font-mono text-orange-400">{{
+                    BytesFixed(ipStats.totalUpload.value, ipStats.totalUpload.unit) }} {{
+                      ipStats.totalUpload.unit
+                    }}</span>
+                </td>
+                <td class="px-3 py-2 text-center">
+                  <span class="font-mono text-cyan-400">{{
+                    BytesFixed(ipStats.totalDownload.value, ipStats.totalDownload.unit) }} {{
+                      ipStats.totalDownload.unit
+                    }}</span>
                 </td>
                 <td class="px-3 py-2 text-center">
                   <span class="font-mono text-slate-200">{{ ipStats.tcpCount }}</span>
@@ -902,34 +908,40 @@ const getConnectionSortIcon = (columnId: string): string => {
                   <span class="font-mono text-slate-300">{{ ipStats.ip }}</span>
                 </td>
                 <td class="px-3 py-2 text-center">
-                  <span class="font-mono text-slate-200">{{ ipStats.totalThroughput.value.toFixed(2) }} {{
-                    ipStats.totalThroughput.unit
+                  <span class="font-mono text-slate-200">{{ BytesFixed(ipStats.totalThroughput.value,
+                    ipStats.totalThroughput.unit) }} {{
+                      ipStats.totalThroughput.unit
                     }}</span>
                 </td>
                 <td class="px-3 py-2 text-center">
-                  <span class="font-mono text-orange-400">{{ ipStats.uploadThroughput.value.toFixed(2) }} {{
-                    ipStats.uploadThroughput.unit
-                  }}</span>
-                </td>
-                <td class="px-3 py-2 text-center">
-                  <span class="font-mono text-cyan-400">{{ ipStats.downloadThroughput.value.toFixed(2) }} {{
-                    ipStats.downloadThroughput.unit
-                  }}</span>
-                </td>
-                <td class="px-3 py-2 text-center">
-                  <span class="font-mono text-slate-200">{{ ipStats.totalTraffic.value.toFixed(2) }} {{
-                    ipStats.totalTraffic.unit
+                  <span class="font-mono text-orange-400">{{ BytesFixed(ipStats.uploadThroughput.value,
+                    ipStats.uploadThroughput.unit) }} {{
+                      ipStats.uploadThroughput.unit
                     }}</span>
                 </td>
                 <td class="px-3 py-2 text-center">
-                  <span class="font-mono text-orange-400">{{ ipStats.totalUpload.value.toFixed(2) }} {{
-                    ipStats.totalUpload.unit
-                  }}</span>
+                  <span class="font-mono text-cyan-400">{{ BytesFixed(ipStats.downloadThroughput.value,
+                    ipStats.downloadThroughput.unit) }} {{
+                      ipStats.downloadThroughput.unit
+                    }}</span>
                 </td>
                 <td class="px-3 py-2 text-center">
-                  <span class="font-mono text-cyan-400">{{ ipStats.totalDownload.value.toFixed(2) }} {{
-                    ipStats.totalDownload.unit
-                  }}</span>
+                  <span class="font-mono text-slate-200">{{ BytesFixed(ipStats.totalTraffic.value,
+                    ipStats.totalTraffic.unit) }} {{
+                      ipStats.totalTraffic.unit
+                    }}</span>
+                </td>
+                <td class="px-3 py-2 text-center">
+                  <span class="font-mono text-orange-400">{{ BytesFixed(ipStats.totalUpload.value,
+                    ipStats.totalUpload.unit) }} {{
+                      ipStats.totalUpload.unit
+                    }}</span>
+                </td>
+                <td class="px-3 py-2 text-center">
+                  <span class="font-mono text-cyan-400">{{ BytesFixed(ipStats.totalDownload.value,
+                    ipStats.totalDownload.unit) }} {{
+                      ipStats.totalDownload.unit
+                    }}</span>
                 </td>
                 <td class="px-3 py-2 text-center">
                   <span class="font-mono text-slate-200">{{ ipStats.tcpCount }}</span>
@@ -986,33 +998,39 @@ const getConnectionSortIcon = (columnId: string): string => {
                   <span class="font-mono text-slate-300">{{ ipStats.ip }}</span>
                 </td>
                 <td class="px-3 py-2 text-center">
-                  <span class="font-mono text-slate-200">{{ ipStats.totalThroughput.value.toFixed(2) }} {{
-                    ipStats.totalThroughput.unit
+                  <span class="font-mono text-slate-200">{{ BytesFixed(ipStats.totalThroughput.value,
+                    ipStats.totalThroughput.unit) }} {{
+                      ipStats.totalThroughput.unit
                     }}</span>
                 </td>
                 <td class="px-3 py-2 text-center">
-                  <span class="font-mono text-orange-400">{{ ipStats.uploadThroughput.value.toFixed(2) }} {{
-                    ipStats.uploadThroughput.unit
-                  }}</span>
-                </td>
-                <td class="px-3 py-2 text-center">
-                  <span class="font-mono text-cyan-400">{{ ipStats.downloadThroughput.value.toFixed(2) }} {{
-                    ipStats.downloadThroughput.unit
-                  }}</span>
-                </td>
-                <td class="px-3 py-2 text-center">
-                  <span class="font-mono text-slate-200">{{ ipStats.totalTraffic.value.toFixed(2) }} {{
-                    ipStats.totalTraffic.unit
-                  }}</span>
-                </td>
-                <td class="px-3 py-2 text-center">
-                  <span class="font-mono text-orange-400">{{ ipStats.totalUpload.value.toFixed(2) }} {{
-                    ipStats.totalUpload.unit
+                  <span class="font-mono text-orange-400">{{ BytesFixed(ipStats.uploadThroughput.value,
+                    ipStats.uploadThroughput.unit) }} {{
+                      ipStats.uploadThroughput.unit
                     }}</span>
                 </td>
                 <td class="px-3 py-2 text-center">
-                  <span class="font-mono text-cyan-400">{{ ipStats.totalDownload.value.toFixed(2) }} {{
-                    ipStats.totalDownload.unit
+                  <span class="font-mono text-cyan-400">{{ BytesFixed(ipStats.downloadThroughput.value,
+                    ipStats.downloadThroughput.unit) }} {{
+                      ipStats.downloadThroughput.unit
+                    }}</span>
+                </td>
+                <td class="px-3 py-2 text-center">
+                  <span class="font-mono text-slate-200">{{ BytesFixed(ipStats.totalTraffic.value,
+                    ipStats.totalTraffic.unit) }} {{
+                      ipStats.totalTraffic.unit
+                    }}</span>
+                </td>
+                <td class="px-3 py-2 text-center">
+                  <span class="font-mono text-orange-400">{{ BytesFixed(ipStats.totalUpload.value,
+                    ipStats.totalUpload.unit) }} {{
+                      ipStats.totalUpload.unit
+                    }}</span>
+                </td>
+                <td class="px-3 py-2 text-center">
+                  <span class="font-mono text-cyan-400">{{ BytesFixed(ipStats.totalDownload.value,
+                    ipStats.totalDownload.unit) }} {{
+                      ipStats.totalDownload.unit
                     }}</span>
                 </td>
                 <td class="px-3 py-2 text-center">
