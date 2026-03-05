@@ -250,6 +250,24 @@ const toggleIpGroup = async (group: IpAddressType) => {
   await setAccordionState(storageKeyMap[group], !uiState.ipGroupCollapsed[group]);
 };
 
+// 格式化流量统计起始时间
+const formatCaptureStartTime = (isoString: string | undefined): string => {
+  if (!isoString) return '-';
+  try {
+    const date = new Date(isoString);
+    return date.toLocaleString('zh-CN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    });
+  } catch {
+    return isoString;
+  }
+};
+
 // ================= 2. 全局搜索词 =================
 const globalFilter = ref('');
 const aggregationFilter = ref(''); // 聚合统计的搜索词
@@ -407,11 +425,11 @@ const filterIPStats = (ips: IPStats[], filter: string): IPStats[] => {
   return ips.filter(ip => {
     // 检查 IP 地址
     if (ip.ip.toLowerCase().includes(lowerFilter)) return true;
-    
+
     // 检查 hostname（如果启用了 DNS）
     const hostname = dnsCache.value.get(ip.ip);
     if (hostname && hostname.toLowerCase().includes(lowerFilter)) return true;
-    
+
     // 检查格式化后的流量值（数值+单位）
     const totalThroughputStr = BytesFixed(ip.totalThroughput.value, ip.totalThroughput.unit) + ip.totalThroughput.unit;
     const uploadThroughputStr = BytesFixed(ip.uploadThroughput.value, ip.uploadThroughput.unit) + ip.uploadThroughput.unit;
@@ -419,14 +437,14 @@ const filterIPStats = (ips: IPStats[], filter: string): IPStats[] => {
     const totalTrafficStr = BytesFixed(ip.totalTraffic.value, ip.totalTraffic.unit) + ip.totalTraffic.unit;
     const totalUploadStr = BytesFixed(ip.totalUpload.value, ip.totalUpload.unit) + ip.totalUpload.unit;
     const totalDownloadStr = BytesFixed(ip.totalDownload.value, ip.totalDownload.unit) + ip.totalDownload.unit;
-    
+
     if (totalThroughputStr.toLowerCase().replace(/\s+/g, '').includes(lowerFilter)) return true;
     if (uploadThroughputStr.toLowerCase().replace(/\s+/g, '').includes(lowerFilter)) return true;
     if (downloadThroughputStr.toLowerCase().replace(/\s+/g, '').includes(lowerFilter)) return true;
     if (totalTrafficStr.toLowerCase().replace(/\s+/g, '').includes(lowerFilter)) return true;
     if (totalUploadStr.toLowerCase().replace(/\s+/g, '').includes(lowerFilter)) return true;
     if (totalDownloadStr.toLowerCase().replace(/\s+/g, '').includes(lowerFilter)) return true;
-    
+
     // 检查原始数值
     if (String(ip.totalThroughput.value).includes(lowerFilter)) return true;
     if (String(ip.uploadThroughput.value).includes(lowerFilter)) return true;
@@ -434,7 +452,7 @@ const filterIPStats = (ips: IPStats[], filter: string): IPStats[] => {
     if (String(ip.totalTraffic.value).includes(lowerFilter)) return true;
     if (String(ip.totalUpload.value).includes(lowerFilter)) return true;
     if (String(ip.totalDownload.value).includes(lowerFilter)) return true;
-    
+
     // 检查单位
     if (ip.totalThroughput.unit.toLowerCase().includes(lowerFilter)) return true;
     if (ip.uploadThroughput.unit.toLowerCase().includes(lowerFilter)) return true;
@@ -442,17 +460,17 @@ const filterIPStats = (ips: IPStats[], filter: string): IPStats[] => {
     if (ip.totalTraffic.unit.toLowerCase().includes(lowerFilter)) return true;
     if (ip.totalUpload.unit.toLowerCase().includes(lowerFilter)) return true;
     if (ip.totalDownload.unit.toLowerCase().includes(lowerFilter)) return true;
-    
+
     // 检查连接数
     if (String(ip.tcpCount).includes(lowerFilter)) return true;
     if (String(ip.udpCount).includes(lowerFilter)) return true;
     if (String(ip.otherCount).includes(lowerFilter)) return true;
-    
+
     return false;
   });
 };
 
-const aggregationData = computed((): { lan: GroupStats; wan: GroupStats; unknown: GroupStats } => {
+const aggregationData = computed((): { capture_start_at: string, lan: GroupStats; wan: GroupStats; unknown: GroupStats } => {
   // 从API数据中提取所有details
   let allDetails: AggregationTrafficDetails[] = [];
 
@@ -533,6 +551,7 @@ const aggregationData = computed((): { lan: GroupStats; wan: GroupStats; unknown
   };
 
   return {
+    capture_start_at: props.aggregationData.capture_start_at,
     lan: calculateGroupTotal(lanIPs, 'lan', '局域网IP'),
     wan: calculateGroupTotal(wanIPs, 'wan', '外网IP'),
     unknown: calculateGroupTotal(unknownIPs, 'unknown', '未知IP'),
@@ -1017,10 +1036,10 @@ const table = useVueTable({
   globalFilterFn: (row, columnId, value) => {
     const search = String(value).toLowerCase().replace(/\s+/g, '');
     const original = row.original;
-    
+
     // 构建要搜索的字符串数组
     const searchFields: string[] = [];
-    
+
     // 基础字段
     searchFields.push(original.ip_family || '');
     searchFields.push(original.protocol || '');
@@ -1029,13 +1048,13 @@ const table = useVueTable({
     searchFields.push(original.destination_ip || '');
     searchFields.push(String(original.destination_port || ''));
     searchFields.push(original.state || '');
-    
+
     // 添加 hostname（如果 DNS 已查询）
     const sourceHostname = dnsCache.value.get(original.source_ip);
     const destHostname = dnsCache.value.get(original.destination_ip);
     if (sourceHostname) searchFields.push(sourceHostname);
     if (destHostname) searchFields.push(destHostname);
-    
+
     // 格式化后的流量值（数值+单位）
     const trafficValue = original.traffic?.value || 0;
     const trafficUnit = original.traffic?.unit || 'B';
@@ -1043,10 +1062,10 @@ const table = useVueTable({
     searchFields.push(formattedTraffic);
     searchFields.push(String(trafficValue));
     searchFields.push(trafficUnit);
-    
+
     // 包数量
     searchFields.push(String(original.packets || ''));
-    
+
     // 合并并搜索
     const rowStr = searchFields.join(' ').toLowerCase().replace(/\s+/g, '');
     return rowStr.includes(search);
@@ -1127,7 +1146,7 @@ const getConnectionSortIcon = (columnId: string): string => {
       <!-- 聚合统计内容 -->
       <div v-show="uiState.accordions.aggregation"
         class="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden">
-        <!-- DNS 查询开关 + 搜索框 -->
+        <!-- DNS 查询开关 + 流量统计起始时间 + 搜索框 -->
         <div class="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
           <!-- DNS 查询开关（居左） -->
           <label class="flex items-center gap-2 cursor-pointer">
@@ -1136,6 +1155,12 @@ const getConnectionSortIcon = (columnId: string): string => {
             <span class="text-sm text-slate-300">启用 DNS 查询</span>
             <span v-if="aggregationQuerying" class="text-xs text-blue-400 animate-pulse">查询中...</span>
           </label>
+          <!-- 流量统计起始时间（中间） -->
+          <div class="flex items-center gap-2 text-sm">
+            <span class="text-slate-400">流量统计起始时间:</span>
+            <span class="text-slate-300 font-mono">{{ formatCaptureStartTime(aggregationData?.capture_start_at)
+              }}</span>
+          </div>
           <!-- 全局搜索框（居右） -->
           <div class="relative">
             <input v-model="aggregationFilter" placeholder="搜索 IP、流量、连接数..."
@@ -1429,6 +1454,10 @@ const getConnectionSortIcon = (columnId: string): string => {
               共 {{ table.getPageCount() }} 页，{{ table.getFilteredRowModel().rows.length }} 条记录
             </span>
             <div class="flex items-center gap-1">
+              <button @click="table.setPageIndex(0)" :disabled="!table.getCanPreviousPage()"
+                class="text-xs px-3 py-1 rounded bg-slate-700 text-slate-300 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                第一页
+              </button>
               <button @click="table.previousPage()" :disabled="!table.getCanPreviousPage()"
                 class="text-xs px-3 py-1 rounded bg-slate-700 text-slate-300 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
                 上一页
@@ -1442,6 +1471,10 @@ const getConnectionSortIcon = (columnId: string): string => {
               <button @click="table.nextPage()" :disabled="!table.getCanNextPage()"
                 class="text-xs px-3 py-1 rounded bg-slate-700 text-slate-300 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
                 下一页
+              </button>
+              <button @click="table.setPageIndex(table.getPageCount() - 1)" :disabled="!table.getCanNextPage()"
+                class="text-xs px-3 py-1 rounded bg-slate-700 text-slate-300 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                最后一页
               </button>
             </div>
           </div>

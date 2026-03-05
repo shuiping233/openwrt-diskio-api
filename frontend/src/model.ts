@@ -120,6 +120,7 @@ export interface AggregationTrafficDetails {
 }
 
 export interface AggregationTrafficMetric {
+  capture_start_at: string;
   capture_interface: string;
   details: AggregationTrafficDetails[];
 }
