@@ -633,16 +633,32 @@ const desiredPageIndex = ref(0);
 // 页码输入框的值
 const pageInputValue = ref('1');
 
-function getDesiredPageIndex() {
-  return desiredPageIndex.value;
-}
-function getCurrentPage() {
-  return currentPage.value;
-}
-function getPageInputValue() {
-  return pageInputValue.value;
-}
+// 受控分页状态 - 必须在 table 和 watch 之前定义
+const pagination = ref({
+  pageSize: pageSize.value,
+  pageIndex: currentPage.value,
+});
 
+// 当配置加载完成后，同步分页大小
+watch(() => settings.network_table_page_size, (newValue) => {
+  if (newValue && newValue !== pageSize.value) {
+    pageSize.value = newValue;
+    isCustomPageSize.value = !pageSizeOptions.includes(newValue);
+    if (isCustomPageSize.value) {
+      customPageSize.value = String(newValue);
+    }
+    // 同步更新 pagination 的 pageSize
+    pagination.value = {
+      ...pagination.value,
+      pageSize: newValue,
+    };
+  }
+}, { immediate: true });
+
+// 同步页码输入框与当前页
+watch(currentPage, (newPage) => {
+  pageInputValue.value = String(newPage + 1);
+}, { immediate: true });
 
 // 跳转到指定页
 const jumpToPage = () => {
@@ -667,22 +683,6 @@ const jumpToPage = () => {
   currentPage.value = newIndex;
   pageInputValue.value = String(validPage);
 };
-
-// 同步页码输入框与当前页
-watch(currentPage, (newPage) => {
-  pageInputValue.value = String(newPage + 1);
-}, { immediate: true });
-
-// 当配置加载完成后，同步分页大小
-watch(() => settings.network_table_page_size, (newValue) => {
-  if (newValue && newValue !== pageSize.value) {
-    pageSize.value = newValue;
-    isCustomPageSize.value = !pageSizeOptions.includes(newValue);
-    if (isCustomPageSize.value) {
-      customPageSize.value = String(newValue);
-    }
-  }
-}, { immediate: true });
 
 // 处理分页大小变更
 const handlePageSizeChange = async (value: string) => {
@@ -736,12 +736,6 @@ const switchToPresetSize = async (size: number) => {
   };
   await setConfig('network_table_page_size', size);
 };
-
-// 受控分页状态
-const pagination = ref({
-  pageSize: pageSize.value,
-  pageIndex: currentPage.value,
-});
 
 // 监听数据变化，仅处理页码越界的情况
 watch(displayData, () => {
