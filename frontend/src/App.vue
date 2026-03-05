@@ -31,7 +31,7 @@ const uiState = reactive({
   lastUpdated: '--',
   isLoading: false,
   refreshInterval: 2000,
-  status: '初始化...'
+  status: '初始化'
 });
 
 let timer: Ref<number | null> = ref(null);
@@ -47,7 +47,7 @@ const getStatusColor = (status: string): string => {
   switch (status) {
     case '运行中':
       return '#10b981'; // 绿色
-    case '刷新中...':
+    case '刷新中':
       return '#3b82f6'; // 蓝色
     case '错误':
       return '#ef4444'; // 红色
@@ -195,7 +195,7 @@ const saveDynamicDataToDB = (dynamicData: DynamicApiResponse, connectionData: Co
 
 const fetchData = async () => {
   uiState.isLoading = true;
-  uiState.status = '刷新中...';
+  uiState.status = '刷新中';
   const reqTime = formatTime();
 
   const shouldFetchAll = settings.enable_metric_record || settings.active_tab === 'monitoringCharts';
@@ -319,8 +319,8 @@ onUnmounted(() => {
         </div>
         <span>{{ uiState.status }}</span>
         <!-- Spinner: Using Tailwind animate-spin -->
-        <div v-if="uiState.isLoading"
-          class="w-3.5 h-3.5 border-2 border-slate-500 border-t-white rounded-full animate-spin"></div>
+        <!-- <div v-if="uiState.isLoading"
+          class="w-3.5 h-3.5 border-2 border-slate-500 border-t-white rounded-full animate-spin"></div> -->
 
         <span class="font-mono">{{ uiState.lastUpdated }}</span>
 
