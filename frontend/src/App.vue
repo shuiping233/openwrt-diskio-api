@@ -2,7 +2,7 @@
 import { ref, reactive, onMounted, onUnmounted, watch, type Ref } from 'vue';
 import dayjs from 'dayjs';
 import type {
-  DynamicApiResponse, StaticApiResponse, ConnectionApiResponse
+  DynamicApiResponse, StaticApiResponse, ConnectionApiResponse, AggregationTrafficResponse
 } from './model';
 import SettingsModal from './components/SettingsModal.vue';
 import NetworkConnectionTable from './components/NetworkConnectionTable.vue';
@@ -21,7 +21,8 @@ const { settings, setConfig, init: initSettings } = useSettings();
 const data = reactive({
   dynamic: {} as DynamicApiResponse,
   static: {} as StaticApiResponse,
-  connection: {} as ConnectionApiResponse
+  connection: {} as ConnectionApiResponse,
+  aggregation: {} as AggregationTrafficResponse
 });
 
 const showSettings = ref(false);
@@ -201,6 +202,7 @@ const fetchData = async () => {
   const shouldFetchDynamic = shouldFetchAll || settings.active_tab === 'system';
   const shouldFetchConnection = shouldFetchAll || settings.active_tab === 'network';
   const shouldFetchStatic = shouldFetchAll || settings.active_tab === 'system';
+  const shouldFetchAggregation = shouldFetchAll || settings.active_tab === 'network';
 
   try {
     const requests: Promise<Response>[] = [];
@@ -208,6 +210,7 @@ const fetchData = async () => {
     if (shouldFetchDynamic) requests.push(fetch('/metric/dynamic'));
     if (shouldFetchConnection) requests.push(fetch('/metric/network_connection'));
     if (shouldFetchStatic) requests.push(fetch('/metric/static'));
+    if (shouldFetchAggregation) requests.push(fetch('/metric/aggregation_traffic'));
 
     const responses = await Promise.all(requests);
 
@@ -226,9 +229,15 @@ const fetchData = async () => {
     }
 
     if (shouldFetchStatic) {
-      const sRes = responses[resIndex];
+      const sRes = responses[resIndex++];
       if (!sRes.ok) throw new Error(`静态数据接口错误: ${sRes.status} ${sRes.statusText}`);
       data.static = (await sRes.json()) as StaticApiResponse;
+    }
+
+    if (shouldFetchAggregation) {
+      const aRes = responses[resIndex];
+      if (!aRes.ok) throw new Error(`聚合流量接口错误: ${aRes.status} ${aRes.statusText}`);
+      data.aggregation = (await aRes.json()) as AggregationTrafficResponse;
     }
 
     if (settings.enable_metric_record) {
@@ -378,7 +387,7 @@ onUnmounted(() => {
 
     <!-- Tab: Network Connections -->
     <div v-if="settings.active_tab === 'network'" class="p-0">
-      <NetworkConnectionTable :connection-data="data.connection" />
+      <NetworkConnectionTable :connection-data="data.connection" :aggregation-data="data.aggregation" />
     </div>
     <!-- Tab: Analytics -->
     <div v-if="settings.active_tab === 'monitoringCharts'">

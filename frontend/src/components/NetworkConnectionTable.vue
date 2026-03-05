@@ -10,7 +10,7 @@ import {
   SortingState,
   ColumnFiltersState
 } from '@tanstack/vue-table';
-import type { ConnectionApiResponse, Connection } from '../model';
+import type { ConnectionApiResponse, AggregationTrafficResponse, AggregationTrafficDetails, IpAddressType } from '../model';
 import { compressIPv6 } from '../utils/ipv6';
 import { convertToBytes, BytesFixed, formatIOBytes, normalizeToBytes } from '../utils/convert';
 import { useToast } from '../useToast';
@@ -19,6 +19,7 @@ import { useDatabase } from '../useDatabase';
 // Props
 const props = defineProps<{
   connectionData?: ConnectionApiResponse;
+  aggregationData?: AggregationTrafficResponse;
 }>();
 
 // Database
@@ -32,7 +33,8 @@ const uiState = reactive({
   },
   ipGroupCollapsed: {
     lan: false,  // 局域网IP组折叠状态
-    other: false,  // 其他IP组折叠状态
+    wan: false,  // 外网IP组折叠状态
+    unknown: false,  // 未知IP组折叠状态
   }
 });
 
@@ -54,10 +56,15 @@ onMounted(async () => {
   if (lanGroupState !== undefined) {
     uiState.ipGroupCollapsed.lan = !lanGroupState; // 注意：存储的是展开状态，我们用的是折叠状态
   }
-  
-  const otherGroupState = await getAccordionState('network_connection_other_group');
-  if (otherGroupState !== undefined) {
-    uiState.ipGroupCollapsed.other = !otherGroupState;
+
+  const wanGroupState = await getAccordionState('network_connection_wan_group');
+  if (wanGroupState !== undefined) {
+    uiState.ipGroupCollapsed.wan = !wanGroupState;
+  }
+
+  const unknownGroupState = await getAccordionState('network_connection_unknown_group');
+  if (unknownGroupState !== undefined) {
+    uiState.ipGroupCollapsed.unknown = !unknownGroupState;
   }
 });
 
@@ -69,11 +76,15 @@ const toggleMainAccordion = async (key: 'aggregation' | 'connectionList') => {
 };
 
 // 切换IP分组折叠状态
-const toggleIpGroup = async (group: 'lan' | 'other') => {
+const toggleIpGroup = async (group: IpAddressType) => {
   uiState.ipGroupCollapsed[group] = !uiState.ipGroupCollapsed[group];
-  const storageKey = group === 'lan' ? 'network_connection_lan_group' : 'network_connection_other_group';
+  const storageKeyMap: Record<IpAddressType, string> = {
+    lan: 'network_connection_lan_group',
+    wan: 'network_connection_wan_group',
+    unknown: 'network_connection_unknown_group'
+  };
   // 存储展开状态（与折叠状态相反）
-  await setAccordionState(storageKey, !uiState.ipGroupCollapsed[group]);
+  await setAccordionState(storageKeyMap[group], !uiState.ipGroupCollapsed[group]);
 };
 
 // ================= 2. 全局搜索词 =================
@@ -120,38 +131,7 @@ const getSortIcon = (column: SortColumn): string => {
   return '';
 };
 
-// ================= 4. 判断IP是否为局域网IP =================
-const isLanIP = (ip: string): boolean => {
-  // IPv4 局域网地址范围
-  const lanPatterns = [
-    /^10\./,                                      // 10.0.0.0/8
-    /^172\.(1[6-9]|2[0-9]|3[01])\./,             // 172.16.0.0/12
-    /^192\.168\./,                               // 192.168.0.0/16
-    /^127\./,                                     // 127.0.0.0/8 (loopback)
-    /^169\.254\./,                               // 169.254.0.0/16 (link-local)
-    /^0\./,                                       // 0.0.0.0/8
-  ];
-  
-  // IPv6 局域网地址
-  const ipv6LanPatterns = [
-    /^::1$/,                                      // loopback
-    /^fc00:/i,                                    // unique local
-    /^fe80:/i,                                    // link-local
-    /^fd00:/i,                                    // unique local
-  ];
-  
-  for (const pattern of lanPatterns) {
-    if (pattern.test(ip)) return true;
-  }
-  
-  for (const pattern of ipv6LanPatterns) {
-    if (pattern.test(ip)) return true;
-  }
-  
-  return false;
-};
-
-// ================= 5. 处理连接数据（去重） =================
+// ================= 4. 处理连接数据（去重） =================
 const displayData = computed(() => {
   const list = props.connectionData?.connections || [];
   if (list.length === 0) return [];
@@ -176,17 +156,18 @@ const displayData = computed(() => {
 // ================= 6. 聚合统计数据计算 =================
 interface IPStats {
   ip: string;
-  trafficBytes: number;  // 总流量（字节）
-  uploadBytes: number;   // 上行流量（字节）
-  downloadBytes: number; // 下行流量（字节）
+  ipType: IpAddressType;
+  trafficBytes: number;  // 总流量（字节）- 使用 total_throughput
+  uploadBytes: number;   // 上行流量（字节）- 使用 incoming
+  downloadBytes: number; // 下行流量（字节）- 使用 outgoing
   tcpCount: number;
   udpCount: number;
   otherCount: number;
-  connections: Connection[];
 }
 
 interface GroupStats {
   name: string;
+  key: IpAddressType;
   ips: IPStats[];
   totalTraffic: number;
   totalUpload: number;
@@ -196,13 +177,18 @@ interface GroupStats {
   totalOther: number;
 }
 
+// 辅助函数：将MetricUnit转换为字节
+const metricUnitToBytes = (metric: { value: number; unit: string }): number => {
+  return normalizeToBytes(metric.value, metric.unit);
+};
+
 // 排序函数
 const sortIPStats = (ips: IPStats[], column: SortColumn, direction: SortDirection): IPStats[] => {
   if (!direction) return ips;
-  
+
   const sorted = [...ips];
   const multiplier = direction === 'desc' ? -1 : 1;
-  
+
   sorted.sort((a, b) => {
     let comparison = 0;
     switch (column) {
@@ -230,7 +216,7 @@ const sortIPStats = (ips: IPStats[], column: SortColumn, direction: SortDirectio
     }
     return comparison * multiplier;
   });
-  
+
   return sorted;
 };
 
@@ -249,78 +235,46 @@ const filterIPStats = (ips: IPStats[], filter: string): IPStats[] => {
   });
 };
 
-const aggregationData = computed((): { lan: GroupStats; other: GroupStats } => {
-  const connections = displayData.value;
-  const ipMap = new Map<string, IPStats>();
-  
-  // 统计每个IP的数据
-  connections.forEach(conn => {
-    // 处理源IP
-    const processIP = (ip: string, isSource: boolean) => {
-      if (!ipMap.has(ip)) {
-        ipMap.set(ip, {
-          ip,
-          trafficBytes: 0,
-          uploadBytes: 0,
-          downloadBytes: 0,
-          tcpCount: 0,
-          udpCount: 0,
-          otherCount: 0,
-          connections: []
-        });
-      }
-      
-      const stats = ipMap.get(ip)!;
-      const trafficBytes = normalizeToBytes(conn.traffic.value, conn.traffic.unit);
-      stats.trafficBytes += trafficBytes;
-      stats.connections.push(conn);
-      
-      // 简化的上下行判断：假设源IP是上行，目标IP是下行
-      if (isSource) {
-        stats.uploadBytes += trafficBytes;
-      } else {
-        stats.downloadBytes += trafficBytes;
-      }
-      
-      // 协议计数
-      const protocol = conn.protocol.toUpperCase();
-      if (protocol === 'TCP') {
-        stats.tcpCount++;
-      } else if (protocol === 'UDP') {
-        stats.udpCount++;
-      } else {
-        stats.otherCount++;
-      }
-    };
-    
-    processIP(conn.source_ip, true);
-    processIP(conn.destination_ip, false);
-  });
-  
-  // 分组为局域网和其他
-  let lanIPs: IPStats[] = [];
-  let otherIPs: IPStats[] = [];
-  
-  ipMap.forEach((stats, ip) => {
-    if (isLanIP(ip)) {
-      lanIPs.push(stats);
-    } else {
-      otherIPs.push(stats);
-    }
-  });
-  
+const aggregationData = computed((): { lan: GroupStats; wan: GroupStats; unknown: GroupStats } => {
+  // 从API数据中提取所有details
+  let allDetails: AggregationTrafficDetails[] = [];
+
+  if (props.aggregationData?.details) {
+    allDetails = props.aggregationData.details;
+  }
+
+  // 转换为IPStats结构
+  const ipStatsList: IPStats[] = allDetails.map((detail) => ({
+    ip: detail.ip,
+    ipType: detail.ip_type,
+    trafficBytes: metricUnitToBytes(detail.total_throughput),
+    uploadBytes: metricUnitToBytes(detail.incoming),
+    downloadBytes: metricUnitToBytes(detail.outgoing),
+    tcpCount: detail.tcp,
+    udpCount: detail.udp,
+    otherCount: detail.other,
+  }));
+
+  // 按ip_type分组
+  let lanIPs: IPStats[] = ipStatsList.filter((ip) => ip.ipType === 'lan');
+  let wanIPs: IPStats[] = ipStatsList.filter((ip) => ip.ipType === 'wan');
+  let unknownIPs: IPStats[] = ipStatsList.filter((ip) => ip.ipType === 'unknown');
+
   // 应用搜索过滤
   lanIPs = filterIPStats(lanIPs, aggregationFilter.value);
-  otherIPs = filterIPStats(otherIPs, aggregationFilter.value);
-  
+  wanIPs = filterIPStats(wanIPs, aggregationFilter.value);
+  unknownIPs = filterIPStats(unknownIPs, aggregationFilter.value);
+
   // 应用排序
   lanIPs = sortIPStats(lanIPs, aggregationSort.column, aggregationSort.direction);
-  otherIPs = sortIPStats(otherIPs, aggregationSort.column, aggregationSort.direction);
-  
+  wanIPs = sortIPStats(wanIPs, aggregationSort.column, aggregationSort.direction);
+  unknownIPs = sortIPStats(unknownIPs, aggregationSort.column, aggregationSort.direction);
+
   // 计算分组汇总（基于过滤后的数据）
-  const calculateGroupTotal = (ips: IPStats[]): GroupStats => {
+  const calculateGroupTotal = (ips: IPStats[], key: IpAddressType, name: string): GroupStats => {
     return {
-      name: '',
+      name,
+      key,
       ips,
       totalTraffic: ips.reduce((sum, ip) => sum + ip.trafficBytes, 0),
       totalUpload: ips.reduce((sum, ip) => sum + ip.uploadBytes, 0),
@@ -330,10 +284,11 @@ const aggregationData = computed((): { lan: GroupStats; other: GroupStats } => {
       totalOther: ips.reduce((sum, ip) => sum + ip.otherCount, 0),
     };
   };
-  
+
   return {
-    lan: { ...calculateGroupTotal(lanIPs), name: '局域网IP' },
-    other: { ...calculateGroupTotal(otherIPs), name: '其他IP' }
+    lan: calculateGroupTotal(lanIPs, 'lan', '局域网IP'),
+    wan: calculateGroupTotal(wanIPs, 'wan', '外网IP'),
+    unknown: calculateGroupTotal(unknownIPs, 'unknown', '未知IP'),
   };
 });
 
@@ -797,30 +752,30 @@ const getConnectionSortIcon = (columnId: string): string => {
                 <td colspan="7" class="px-5 py-4 text-center text-slate-500 text-xs">暂无局域网IP数据</td>
               </tr>
 
-              <!-- 其他IP分组 -->
+              <!-- 外网IP分组 -->
               <tr class="bg-slate-700/30 hover:bg-slate-700/50 transition-colors cursor-pointer"
-                @click="toggleIpGroup('other')">
+                @click="toggleIpGroup('wan')">
                 <td colspan="7" class="px-3 py-3 text-left">
                   <div class="flex items-center justify-between">
                     <div class="flex items-center gap-2">
                       <span class="text-slate-500 transition-transform duration-300"
-                        :class="{ 'rotate-180': !uiState.ipGroupCollapsed.other }">▼</span>
-                      <span class="font-semibold text-slate-200">{{ aggregationData.other.name }}</span>
-                      <span class="text-xs text-slate-500">({{ aggregationData.other.ips.length }} 个 IP)</span>
+                        :class="{ 'rotate-180': !uiState.ipGroupCollapsed.wan }">▼</span>
+                      <span class="font-semibold text-slate-200">{{ aggregationData.wan.name }}</span>
+                      <span class="text-xs text-slate-500">({{ aggregationData.wan.ips.length }} 个 IP)</span>
                     </div>
                     <div class="flex items-center gap-4 text-xs">
-                      <span class="text-slate-400">总流量: <span class="text-slate-200 font-mono">{{ formatTraffic(aggregationData.other.totalTraffic) }}</span></span>
-                      <span class="text-slate-400">上行: <span class="text-orange-400 font-mono">{{ formatTraffic(aggregationData.other.totalUpload) }}</span></span>
-                      <span class="text-slate-400">下行: <span class="text-cyan-400 font-mono">{{ formatTraffic(aggregationData.other.totalDownload) }}</span></span>
-                      <span class="text-slate-400">TCP: <span class="text-slate-200 font-mono">{{ aggregationData.other.totalTcp }}</span></span>
-                      <span class="text-slate-400">UDP: <span class="text-slate-200 font-mono">{{ aggregationData.other.totalUdp }}</span></span>
-                      <span class="text-slate-400">其他: <span class="text-slate-200 font-mono">{{ aggregationData.other.totalOther }}</span></span>
+                      <span class="text-slate-400">总流量: <span class="text-slate-200 font-mono">{{ formatTraffic(aggregationData.wan.totalTraffic) }}</span></span>
+                      <span class="text-slate-400">上行: <span class="text-orange-400 font-mono">{{ formatTraffic(aggregationData.wan.totalUpload) }}</span></span>
+                      <span class="text-slate-400">下行: <span class="text-cyan-400 font-mono">{{ formatTraffic(aggregationData.wan.totalDownload) }}</span></span>
+                      <span class="text-slate-400">TCP: <span class="text-slate-200 font-mono">{{ aggregationData.wan.totalTcp }}</span></span>
+                      <span class="text-slate-400">UDP: <span class="text-slate-200 font-mono">{{ aggregationData.wan.totalUdp }}</span></span>
+                      <span class="text-slate-400">其他: <span class="text-slate-200 font-mono">{{ aggregationData.wan.totalOther }}</span></span>
                     </div>
                   </div>
                 </td>
               </tr>
-              <!-- 其他IP详细行 -->
-              <tr v-for="ipStats in aggregationData.other.ips" :key="ipStats.ip" v-show="!uiState.ipGroupCollapsed.other"
+              <!-- 外网IP详细行 -->
+              <tr v-for="ipStats in aggregationData.wan.ips" :key="ipStats.ip" v-show="!uiState.ipGroupCollapsed.wan"
                 class="hover:bg-slate-700/30 transition-colors">
                 <td class="px-3 py-2 text-center">
                   <span class="font-mono text-slate-300">{{ ipStats.ip }}</span>
@@ -844,8 +799,59 @@ const getConnectionSortIcon = (columnId: string): string => {
                   <span class="font-mono text-slate-200">{{ ipStats.otherCount }}</span>
                 </td>
               </tr>
-              <tr v-if="aggregationData.other.ips.length === 0 && !uiState.ipGroupCollapsed.other">
-                <td colspan="7" class="px-5 py-4 text-center text-slate-500 text-xs">暂无其他IP数据</td>
+              <tr v-if="aggregationData.wan.ips.length === 0 && !uiState.ipGroupCollapsed.wan">
+                <td colspan="7" class="px-5 py-4 text-center text-slate-500 text-xs">暂无外网IP数据</td>
+              </tr>
+
+              <!-- 未知IP分组 -->
+              <tr class="bg-slate-700/30 hover:bg-slate-700/50 transition-colors cursor-pointer"
+                @click="toggleIpGroup('unknown')">
+                <td colspan="7" class="px-3 py-3 text-left">
+                  <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                      <span class="text-slate-500 transition-transform duration-300"
+                        :class="{ 'rotate-180': !uiState.ipGroupCollapsed.unknown }">▼</span>
+                      <span class="font-semibold text-slate-200">{{ aggregationData.unknown.name }}</span>
+                      <span class="text-xs text-slate-500">({{ aggregationData.unknown.ips.length }} 个 IP)</span>
+                    </div>
+                    <div class="flex items-center gap-4 text-xs">
+                      <span class="text-slate-400">总流量: <span class="text-slate-200 font-mono">{{ formatTraffic(aggregationData.unknown.totalTraffic) }}</span></span>
+                      <span class="text-slate-400">上行: <span class="text-orange-400 font-mono">{{ formatTraffic(aggregationData.unknown.totalUpload) }}</span></span>
+                      <span class="text-slate-400">下行: <span class="text-cyan-400 font-mono">{{ formatTraffic(aggregationData.unknown.totalDownload) }}</span></span>
+                      <span class="text-slate-400">TCP: <span class="text-slate-200 font-mono">{{ aggregationData.unknown.totalTcp }}</span></span>
+                      <span class="text-slate-400">UDP: <span class="text-slate-200 font-mono">{{ aggregationData.unknown.totalUdp }}</span></span>
+                      <span class="text-slate-400">其他: <span class="text-slate-200 font-mono">{{ aggregationData.unknown.totalOther }}</span></span>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+              <!-- 未知IP详细行 -->
+              <tr v-for="ipStats in aggregationData.unknown.ips" :key="ipStats.ip" v-show="!uiState.ipGroupCollapsed.unknown"
+                class="hover:bg-slate-700/30 transition-colors">
+                <td class="px-3 py-2 text-center">
+                  <span class="font-mono text-slate-300">{{ ipStats.ip }}</span>
+                </td>
+                <td class="px-3 py-2 text-center">
+                  <span class="font-mono text-slate-200">{{ formatTraffic(ipStats.trafficBytes) }}</span>
+                </td>
+                <td class="px-3 py-2 text-center">
+                  <span class="font-mono text-orange-400">{{ formatTraffic(ipStats.uploadBytes) }}</span>
+                </td>
+                <td class="px-3 py-2 text-center">
+                  <span class="font-mono text-cyan-400">{{ formatTraffic(ipStats.downloadBytes) }}</span>
+                </td>
+                <td class="px-3 py-2 text-center">
+                  <span class="font-mono text-slate-200">{{ ipStats.tcpCount }}</span>
+                </td>
+                <td class="px-3 py-2 text-center">
+                  <span class="font-mono text-slate-200">{{ ipStats.udpCount }}</span>
+                </td>
+                <td class="px-3 py-2 text-center">
+                  <span class="font-mono text-slate-200">{{ ipStats.otherCount }}</span>
+                </td>
+              </tr>
+              <tr v-if="aggregationData.unknown.ips.length === 0 && !uiState.ipGroupCollapsed.unknown">
+                <td colspan="7" class="px-5 py-4 text-center text-slate-500 text-xs">暂无未知IP数据</td>
               </tr>
             </tbody>
           </table>

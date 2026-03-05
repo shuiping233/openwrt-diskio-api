@@ -97,6 +97,35 @@ export interface UserSetting {
   value: string | number | boolean; // 值
 }
 
+// ================= 聚合流量统计结构 =================
+export type IpAddressType = 'lan' | 'wan' | 'unknown';
+
+export interface MetricUnit {
+  value: number;
+  unit: string;
+}
+
+export interface AggregationTrafficDetails {
+  ip: string;
+  ip_type: IpAddressType;
+  incoming: MetricUnit;
+  outgoing: MetricUnit;
+  total_throughput: MetricUnit;
+  total_incoming: MetricUnit;
+  total_outgoing: MetricUnit;
+  total_traffic: MetricUnit;
+  tcp: number;
+  udp: number;
+  other: number;
+}
+
+export interface AggregationTrafficMetric {
+  capture_interface: string;
+  details: AggregationTrafficDetails[];
+}
+
+export type AggregationTrafficResponse = AggregationTrafficMetric;
+
 export const TimeRanges = [
   { label: '1 分钟', value: 60 * 1000 },
   { label: '10 分钟', value: 10 * 60 * 1000 },
