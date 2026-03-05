@@ -33,6 +33,7 @@ type IPMetrics struct {
 
 type EbpfNetTrafficService struct {
 	captureInterface    string
+	interfaceIp         uint32
 	interfaceCIDR       *net.IPNet
 	keyExpiredTime      time.Duration
 	activeChan          chan struct{}
@@ -58,10 +59,17 @@ func (svc *EbpfNetTrafficService) InitEbpfInterfaceDevice(targetInterface string
 	if err != nil {
 		return err
 	}
-	_, ipNet, err := net.ParseCIDR(cidr)
+	ip, ipNet, err := net.ParseCIDR(cidr)
 	if err != nil {
 		return err
 	}
+	ipv4 := ip.To4()
+	if ipv4 == nil {
+		return fmt.Errorf("Interface %s does not have a valid IPv4 address", targetInterface)
+	}
+
+	// 这里的位移顺序要对应 formatIP: byte(n), byte(n>>8), byte(n>>16), byte(n>>24)
+	svc.interfaceIp = uint32(ipv4[0]) | uint32(ipv4[1])<<8 | uint32(ipv4[2])<<16 | uint32(ipv4[3])<<24
 	svc.interfaceCIDR = ipNet
 
 	if err := rlimit.RemoveMemlock(); err != nil {
@@ -259,18 +267,18 @@ func (svc *EbpfNetTrafficService) GetAggregationTrafficMetric() model.Aggregatio
 }
 
 func (svc *EbpfNetTrafficService) trafficAggregate(key bpf.BpfFlowKey, delta uint64, res map[uint32]*IPMetrics) {
-	rateKB := float64(delta) / 1024.0
+	rateByte := float64(delta)
 
-	// 只统计局域网段 IP 的流量
-	if svc.IsInLocalSubnet(key.SrcIp) {
+	// 只统计局域网段 IP 的流量, 且不统计自身网口的 IP 的流量
+	if key.SrcIp != svc.interfaceIp && svc.IsInLocalSubnet(key.SrcIp) {
 		m := getOrCreateMetrics(key.SrcIp, res)
-		m.UploadRate += rateKB
+		m.UploadRate += rateByte
 		m.TotalUpload += delta
 	}
 
-	if svc.IsInLocalSubnet(key.DstIp) {
+	if key.DstIp != svc.interfaceIp && svc.IsInLocalSubnet(key.DstIp) {
 		m := getOrCreateMetrics(key.DstIp, res)
-		m.DownloadRate += rateKB
+		m.DownloadRate += rateByte
 		m.TotalDownload += delta
 	}
 }
