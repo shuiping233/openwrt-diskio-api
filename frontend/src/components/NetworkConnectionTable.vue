@@ -17,6 +17,7 @@ import { convertToBytes, BytesFixed, formatIOBytes, normalizeToBytes, formatData
 import { useToast } from '../useToast';
 import { useDatabase } from '../useDatabase';
 import { useSettings } from '../useSettings';
+import { useDnsQuery } from '../useDnsQuery';
 
 // Props
 const props = defineProps<{
@@ -26,6 +27,102 @@ const props = defineProps<{
 
 // Database
 const { getAccordionState, setAccordionState } = useDatabase();
+
+// DNS Query
+const { queryDns, isQuerying: isDnsQuerying } = useDnsQuery();
+const { settings, setConfig: setConfig } = useSettings();
+
+// DNS 缓存映射表
+const dnsCache = ref<Map<string, string>>(new Map());
+
+// 聚合统计 DNS 启用状态
+const enableAggregationDns = computed({
+  get: () => settings.enable_dns_query_aggregation,
+  set: async (value) => {
+    await setConfig('enable_dns_query_aggregation', value);
+    if (value) {
+      // 启用时立即查询当前显示的 IP
+      queryAggregationDns();
+    }
+  }
+});
+
+// 连接列表 DNS 启用状态
+const enableConnectionsDns = computed({
+  get: () => settings.enable_dns_query_connections,
+  set: async (value) => {
+    await setConfig('enable_dns_query_connections', value);
+    if (value) {
+      // 启用时立即查询当前显示的 IP
+      queryConnectionsDns();
+    }
+  }
+});
+
+// 获取 IP 显示文本（主机名或 IP）
+const getIpDisplay = (ip: string): string => {
+  return dnsCache.value.get(ip) || ip;
+};
+
+// 获取聚合统计表格中当前显示的 IP 地址
+const getAggregationVisibleIps = (): string[] => {
+  const ips: string[] = [];
+  // 遍历所有分组的 IP
+  for (const group of [aggregationData.value.lan, aggregationData.value.wan, aggregationData.value.unknown]) {
+    for (const ipStats of group.ips) {
+      if (!dnsCache.value.has(ipStats.ip)) {
+        ips.push(ipStats.ip);
+      }
+    }
+  }
+  return ips;
+};
+
+// 查询聚合统计 DNS
+const queryAggregationDns = async () => {
+  if (!enableAggregationDns.value) return;
+  const ips = getAggregationVisibleIps();
+  if (ips.length === 0) return;
+
+  const results = await queryDns(ips);
+  for (const [ip, hostname] of results) {
+    dnsCache.value.set(ip, hostname);
+  }
+};
+
+// 获取连接列表表格中当前显示的 IP 地址
+const getConnectionsVisibleIps = (): string[] => {
+  const ips: string[] = [];
+  // table 在下方定义，使用 try-catch 避免初始化时出错
+  try {
+    const visibleRows = table.getPaginationRowModel().rows;
+    for (const row of visibleRows) {
+      const sourceIp = row.original.source_ip;
+      const destIp = row.original.destination_ip;
+      if (!dnsCache.value.has(sourceIp)) {
+        ips.push(sourceIp);
+      }
+      if (!dnsCache.value.has(destIp)) {
+        ips.push(destIp);
+      }
+    }
+  } catch (e) {
+    // table 尚未初始化
+  }
+  return [...new Set(ips)]; // 去重
+};
+
+// 查询连接列表 DNS
+const queryConnectionsDns = async () => {
+  if (!enableConnectionsDns.value) return;
+  const ips = getConnectionsVisibleIps();
+  if (ips.length === 0) return;
+
+  const results = await queryDns(ips);
+  for (const [ip, hostname] of results) {
+    dnsCache.value.set(ip, hostname);
+  }
+};
 
 // ================= 1. 折叠状态管理 =================
 const uiState = reactive({
@@ -469,7 +566,12 @@ const columns = [
       const row = info.row.original;
       const ip = info.getValue();
       const port = row.source_port;
-      return h('span', { class: 'font-mono text-slate-300' }, formatIP(ip, row.ip_family) + (port > 0 ? ':' + port : ''));
+      const displayIp = dnsCache.value.get(ip) || formatIP(ip, row.ip_family);
+      const fullText = displayIp + (port > 0 ? ':' + port : '');
+      return h('span', {
+        class: 'font-mono text-slate-300',
+        title: formatIP(ip, row.ip_family)
+      }, fullText);
     },
     enableSorting: true,
     sortingFn: (rowA, rowB) => {
@@ -501,7 +603,12 @@ const columns = [
       const row = info.row.original;
       const ip = info.getValue();
       const port = row.destination_port;
-      return h('span', { class: 'font-mono text-slate-300' }, formatIP(ip, row.ip_family) + (port > 0 ? ':' + port : ''));
+      const displayIp = dnsCache.value.get(ip) || formatIP(ip, row.ip_family);
+      const fullText = displayIp + (port > 0 ? ':' + port : '');
+      return h('span', {
+        class: 'font-mono text-slate-300',
+        title: formatIP(ip, row.ip_family)
+      }, fullText);
     },
     enableSorting: true,
     sortingFn: (rowA, rowB) => {
@@ -614,7 +721,7 @@ const columns = [
 ];
 
 // ================= 分页相关配置 =================
-const { settings, setConfig } = useSettings();
+// 注意：settings 和 setConfig 已在前面声明
 
 // 分页大小选项
 const pageSizeOptions = [20, 50, 100, 500, 1000];
@@ -815,6 +922,20 @@ const getConnectionSortIcon = (columnId: string): string => {
   if (sorting.length === 0 || sorting[0].id !== columnId) return '';
   return sorting[0].desc ? '↓' : '↑';
 };
+
+// 监听分页变化，自动查询 DNS
+watch(() => pagination.value.pageIndex, () => {
+  if (enableConnectionsDns.value) {
+    queryConnectionsDns();
+  }
+});
+
+// 监听聚合统计数据变化，自动查询 DNS
+watch(() => aggregationData.value, () => {
+  if (enableAggregationDns.value) {
+    queryAggregationDns();
+  }
+}, { deep: true });
 </script>
 
 <template>
@@ -856,8 +977,17 @@ const getConnectionSortIcon = (columnId: string): string => {
           <h3 class="text-lg font-semibold text-slate-200 group-hover:text-white">聚合统计</h3>
           <span class="text-xs text-slate-500">按 IP 地址聚合统计</span>
         </div>
-        <span class="text-slate-500 transition-transform duration-300"
-          :class="{ 'rotate-180': uiState.accordions.aggregation }">▼</span>
+        <div class="flex items-center gap-4">
+          <!-- DNS 查询开关 -->
+          <label class="flex items-center gap-2 cursor-pointer" @click.stop>
+            <input type="checkbox" v-model="enableAggregationDns"
+              class="w-4 h-4 rounded border-slate-600 text-blue-500 focus:ring-blue-500 bg-slate-700" />
+            <span class="text-sm text-slate-300">启用 DNS 查询</span>
+            <span v-if="isDnsQuerying" class="text-xs text-blue-400 animate-pulse">查询中...</span>
+          </label>
+          <span class="text-slate-500 transition-transform duration-300"
+            :class="{ 'rotate-180': uiState.accordions.aggregation }">▼</span>
+        </div>
       </div>
 
       <!-- 聚合统计内容 -->
@@ -993,7 +1123,7 @@ const getConnectionSortIcon = (columnId: string): string => {
                 <tr v-for="ipStats in group.ips" :key="ipStats.ip" v-show="!uiState.ipGroupCollapsed[group.key]"
                   class="hover:bg-slate-700/30 transition-colors">
                   <td class="px-3 py-2 text-center">
-                    <span class="font-mono text-slate-300">{{ ipStats.ip }}</span>
+                    <span class="font-mono text-slate-300" :title="ipStats.ip">{{ getIpDisplay(ipStats.ip) }}</span>
                   </td>
                   <td class="px-3 py-2 text-center">
                     <span class="font-mono text-slate-200">{{
@@ -1060,8 +1190,16 @@ const getConnectionSortIcon = (columnId: string): string => {
         <div class="flex items-center gap-4">
           <h3 class="text-lg font-semibold text-slate-200 group-hover:text-white">连接列表</h3>
         </div>
-        <span class="text-slate-500 transition-transform duration-300"
-          :class="{ 'rotate-180': uiState.accordions.connectionList }">▼</span>
+        <div class="flex items-center gap-4">
+          <!-- DNS 查询开关 -->
+          <label class="flex items-center gap-2 cursor-pointer" @click.stop>
+            <input type="checkbox" v-model="enableConnectionsDns"
+              class="w-4 h-4 rounded border-slate-600 text-blue-500 focus:ring-blue-500 bg-slate-700" />
+            <span class="text-sm text-slate-300">启用 DNS 查询</span>
+          </label>
+          <span class="text-slate-500 transition-transform duration-300"
+            :class="{ 'rotate-180': uiState.accordions.connectionList }">▼</span>
+        </div>
       </div>
 
       <!-- 连接列表内容 -->

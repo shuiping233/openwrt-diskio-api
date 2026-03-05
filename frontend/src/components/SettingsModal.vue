@@ -141,12 +141,39 @@ watch(() => props.isOpen, (newVal) => {
             </div>
           </div>
 
-          <!-- 预留：可在此添加更多分类 -->
-          <!-- <div>
-             <h3 class="text-lg font-bold text-green-400 mb-1 pb-2 border-b border-slate-700">
-               其他设置
-             </h3>
-          </div> -->
+          <!-- DNS 查询设置 -->
+          <div>
+            <h3 class="text-lg font-bold text-green-400 mb-1 pb-2 border-b border-slate-700">
+              DNS 查询设置
+            </h3>
+
+            <div class="mt-4 space-y-4">
+              <!-- 配置 : DNS 缓存过期时间 -->
+              <div class="flex justify-between items-center">
+                <label class="text-slate-300 text-sm">DNS 缓存过期时间</label>
+                <div class="flex items-center gap-2">
+                  <input type="number" min="1" max="60" :value="settings.dns_cache_ttl"
+                    @change="(e: Event) => handleSave('dns_cache_ttl', parseInt((e.target as HTMLInputElement).value, 10))"
+                    class="border rounded px-3 py-1.5 w-20 outline-none transition-colors bg-slate-900 border-slate-600 text-white focus:border-blue-500" />
+                  <span class="text-slate-400 text-sm">分钟</span>
+                </div>
+              </div>
+              <p class="text-xs text-slate-500">
+                DNS 查询结果的缓存时间，过期后将重新查询。
+              </p>
+
+              <!-- 配置 : DNS 批量查询大小 -->
+              <div class="flex justify-between items-center">
+                <label class="text-slate-300 text-sm">每批查询 IP 数量</label>
+                <input type="number" min="10" max="100" :value="settings.dns_batch_size"
+                  @change="(e: Event) => handleSave('dns_batch_size', parseInt((e.target as HTMLInputElement).value, 10))"
+                  class="border rounded px-3 py-1.5 w-24 outline-none transition-colors bg-slate-900 border-slate-600 text-white focus:border-blue-500" />
+              </div>
+              <p class="text-xs text-slate-500">
+                每次 DNS 查询请求携带的最大 IP 地址数量。
+              </p>
+            </div>
+          </div>
 
         </div>
 

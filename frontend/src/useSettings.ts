@@ -10,6 +10,10 @@ export interface Settings {
   active_tab: TabType;
   chart_time_range: number;
   network_table_page_size: number;
+  enable_dns_query_aggregation: boolean;
+  enable_dns_query_connections: boolean;
+  dns_cache_ttl: number;
+  dns_batch_size: number;
 }
 
 export const defaultSettings: Settings = {
@@ -18,7 +22,11 @@ export const defaultSettings: Settings = {
   refresh_interval: 2000,
   active_tab: 'system',
   chart_time_range: 60 * 1000,
-  network_table_page_size: 20
+  network_table_page_size: 20,
+  enable_dns_query_aggregation: false,
+  enable_dns_query_connections: false,
+  dns_cache_ttl: 5,
+  dns_batch_size: 50
 };
 
 const settings = reactive<Settings>({ ...defaultSettings });
