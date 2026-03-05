@@ -172,6 +172,20 @@ watch(() => props.isOpen, (newVal) => {
               <p class="text-xs text-slate-500">
                 每次 DNS 查询请求携带的最大 IP 地址数量。
               </p>
+
+              <!-- 配置 : DNS 轮询间隔 -->
+              <div class="flex justify-between items-center">
+                <label class="text-slate-300 text-sm">DNS 轮询间隔</label>
+                <div class="flex items-center gap-2">
+                  <input type="number" min="5" max="300" :value="settings.dns_poll_interval"
+                    @change="(e: Event) => handleSave('dns_poll_interval', parseInt((e.target as HTMLInputElement).value, 10))"
+                    class="border rounded px-3 py-1.5 w-20 outline-none transition-colors bg-slate-900 border-slate-600 text-white focus:border-blue-500" />
+                  <span class="text-slate-400 text-sm">秒</span>
+                </div>
+              </div>
+              <p class="text-xs text-slate-500">
+                DNS 查询的轮询间隔时间，开启 DNS 查询后每隔此时间会批量查询一次 IP 对应的主机名。
+              </p>
             </div>
           </div>
 

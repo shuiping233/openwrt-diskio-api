@@ -14,6 +14,7 @@ export interface Settings {
   enable_dns_query_connections: boolean;
   dns_cache_ttl: number;
   dns_batch_size: number;
+  dns_poll_interval: number;
 }
 
 export const defaultSettings: Settings = {
@@ -26,7 +27,8 @@ export const defaultSettings: Settings = {
   enable_dns_query_aggregation: false,
   enable_dns_query_connections: false,
   dns_cache_ttl: 5,
-  dns_batch_size: 50
+  dns_batch_size: 50,
+  dns_poll_interval: 30
 };
 
 const settings = reactive<Settings>({ ...defaultSettings });

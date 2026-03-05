@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, h, watch, reactive, onMounted, nextTick } from 'vue';
+import { ref, computed, h, watch, reactive, onMounted, onUnmounted, nextTick } from 'vue';
 import {
   useVueTable,
   getCoreRowModel,
@@ -29,11 +29,15 @@ const props = defineProps<{
 const { getAccordionState, setAccordionState } = useDatabase();
 
 // DNS Query
-const { queryDns, isQuerying: isDnsQuerying } = useDnsQuery();
+const { queryDns } = useDnsQuery();
 const { settings, setConfig: setConfig } = useSettings();
 
 // DNS 缓存映射表
 const dnsCache = ref<Map<string, string>>(new Map());
+
+// 分别跟踪两个表格的查询状态
+const aggregationQuerying = ref(false);
+const connectionsQuerying = ref(false);
 
 // 聚合统计 DNS 启用状态
 const enableAggregationDns = computed({
@@ -80,17 +84,22 @@ const getAggregationVisibleIps = (): string[] => {
 
 // 查询聚合统计 DNS
 const queryAggregationDns = async () => {
-  if (!enableAggregationDns.value) return;
+  if (!enableAggregationDns.value || aggregationQuerying.value) return;
   const ips = getAggregationVisibleIps();
   if (ips.length === 0) return;
 
-  const results = await queryDns(ips);
-  for (const [ip, hostname] of results) {
-    dnsCache.value.set(ip, hostname);
+  aggregationQuerying.value = true;
+  try {
+    const results = await queryDns(ips);
+    for (const [ip, hostname] of results) {
+      dnsCache.value.set(ip, hostname);
+    }
+  } finally {
+    aggregationQuerying.value = false;
   }
 };
 
-// 获取连接列表表格中当前显示的 IP 地址
+// 获取连接列表表格中当前显示的 IP 地址（仅当前页）
 const getConnectionsVisibleIps = (): string[] => {
   const ips: string[] = [];
   // table 在下方定义，使用 try-catch 避免初始化时出错
@@ -114,15 +123,70 @@ const getConnectionsVisibleIps = (): string[] => {
 
 // 查询连接列表 DNS
 const queryConnectionsDns = async () => {
-  if (!enableConnectionsDns.value) return;
+  if (!enableConnectionsDns.value || connectionsQuerying.value) return;
   const ips = getConnectionsVisibleIps();
   if (ips.length === 0) return;
 
-  const results = await queryDns(ips);
-  for (const [ip, hostname] of results) {
-    dnsCache.value.set(ip, hostname);
+  connectionsQuerying.value = true;
+  try {
+    const results = await queryDns(ips);
+    for (const [ip, hostname] of results) {
+      dnsCache.value.set(ip, hostname);
+    }
+  } finally {
+    connectionsQuerying.value = false;
   }
 };
+
+// DNS 轮询定时器
+let dnsPollInterval: number | null = null;
+
+// 启动 DNS 轮询
+const startDnsPolling = () => {
+  if (dnsPollInterval) return;
+  const intervalMs = settings.dns_poll_interval * 1000;
+  dnsPollInterval = window.setInterval(() => {
+    if (enableAggregationDns.value) {
+      queryAggregationDns();
+    }
+    if (enableConnectionsDns.value) {
+      queryConnectionsDns();
+    }
+  }, intervalMs);
+};
+
+// 停止 DNS 轮询
+const stopDnsPolling = () => {
+  if (dnsPollInterval) {
+    clearInterval(dnsPollInterval);
+    dnsPollInterval = null;
+  }
+};
+
+// 监听 DNS 启用状态，启动/停止轮询
+watch([enableAggregationDns, enableConnectionsDns], ([aggEnabled, connEnabled]) => {
+  if (aggEnabled || connEnabled) {
+    startDnsPolling();
+    // 立即执行一次查询
+    if (aggEnabled) queryAggregationDns();
+    if (connEnabled) queryConnectionsDns();
+  } else {
+    stopDnsPolling();
+  }
+}, { immediate: true });
+
+// 监听轮询间隔变化，重启轮询
+watch(() => settings.dns_poll_interval, () => {
+  if (enableAggregationDns.value || enableConnectionsDns.value) {
+    stopDnsPolling();
+    startDnsPolling();
+  }
+});
+
+// 组件卸载时清理定时器
+onUnmounted(() => {
+  stopDnsPolling();
+});
 
 // ================= 1. 折叠状态管理 =================
 const uiState = reactive({
@@ -922,20 +986,6 @@ const getConnectionSortIcon = (columnId: string): string => {
   if (sorting.length === 0 || sorting[0].id !== columnId) return '';
   return sorting[0].desc ? '↓' : '↑';
 };
-
-// 监听分页变化，自动查询 DNS
-watch(() => pagination.value.pageIndex, () => {
-  if (enableConnectionsDns.value) {
-    queryConnectionsDns();
-  }
-});
-
-// 监听聚合统计数据变化，自动查询 DNS
-watch(() => aggregationData.value, () => {
-  if (enableAggregationDns.value) {
-    queryAggregationDns();
-  }
-}, { deep: true });
 </script>
 
 <template>
@@ -991,7 +1041,7 @@ watch(() => aggregationData.value, () => {
             <input type="checkbox" v-model="enableAggregationDns"
               class="w-4 h-4 rounded border-slate-600 text-blue-500 focus:ring-blue-500 bg-slate-700" />
             <span class="text-sm text-slate-300">启用 DNS 查询</span>
-            <span v-if="isDnsQuerying" class="text-xs text-blue-400 animate-pulse">查询中...</span>
+            <span v-if="aggregationQuerying" class="text-xs text-blue-400 animate-pulse">查询中...</span>
           </label>
           <!-- 全局搜索框（居右） -->
           <div class="relative">
@@ -1203,6 +1253,7 @@ watch(() => aggregationData.value, () => {
             <input type="checkbox" v-model="enableConnectionsDns"
               class="w-4 h-4 rounded border-slate-600 text-blue-500 focus:ring-blue-500 bg-slate-700" />
             <span class="text-sm text-slate-300">启用 DNS 查询</span>
+            <span v-if="connectionsQuerying" class="text-xs text-blue-400 animate-pulse">查询中...</span>
           </label>
           <!-- 全局搜索框（居右） -->
           <div class="relative">

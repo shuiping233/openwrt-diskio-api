@@ -1,5 +1,6 @@
 import { ref, computed } from 'vue';
 import { useSettings } from './useSettings';
+import { compressIPv6 } from './utils/ipv6';
 
 interface CacheEntry {
   hostname: string;
@@ -123,8 +124,13 @@ export function useDnsQuery() {
           const hostname = hostnames[0]; // 使用第一个主机名
           cache.set(ip, hostname);
           result.set(ip, hostname);
+        } else {
+          // 查不到结果，记录为 IP 自己，避免重复查询
+          // IPv6 地址需要压缩以保持与 key 一致
+          const valueToCache = ip.includes(':') ? `[${compressIPv6(ip)}]` : ip;
+          cache.set(ip, valueToCache);
+          // 不加入 result，保持显示原 IP
         }
-        // 如果查不到，不加入结果，保持原样
       }
     } catch (err) {
       console.error('DNS query error:', err);
