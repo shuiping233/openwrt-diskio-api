@@ -783,275 +783,99 @@ const getConnectionSortIcon = (columnId: string): string => {
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-700">
-              <!-- 局域网IP分组 -->
-              <tr class="bg-slate-700/30 hover:bg-slate-700/50 transition-colors cursor-pointer"
-                @click="toggleIpGroup('lan')">
-                <td colspan="10" class="px-3 py-3 text-left">
-                  <div class="flex items-center justify-between">
-                    <div class="flex items-center gap-2">
-                      <span class="text-slate-500 transition-transform duration-300"
-                        :class="{ 'rotate-180': !uiState.ipGroupCollapsed.lan }">▼</span>
-                      <span class="font-semibold text-slate-200">{{ aggregationData.lan.name }}</span>
-                      <span class="text-xs text-slate-500">({{ aggregationData.lan.ips.length }} 个 IP)</span>
+              <template v-for="group in [aggregationData.lan, aggregationData.wan, aggregationData.unknown]"
+                :key="group.key">
+                <!-- 分组标题行 -->
+                <tr class="bg-slate-700/30 hover:bg-slate-700/50 transition-colors cursor-pointer"
+                  @click="toggleIpGroup(group.key)">
+                  <td colspan="10" class="px-3 py-3 text-left">
+                    <div class="flex items-center justify-between">
+                      <div class="flex items-center gap-2">
+                        <span class="text-slate-500 transition-transform duration-300"
+                          :class="{ 'rotate-180': !uiState.ipGroupCollapsed[group.key] }">▼</span>
+                        <span class="font-semibold text-slate-200">{{ group.name }}</span>
+                        <span class="text-xs text-slate-500">({{ group.ips.length }} 个 IP)</span>
+                      </div>
+                      <div class="flex items-center gap-4 text-xs">
+                        <span class="text-slate-400">总实时速率: <span class="text-slate-200 font-mono">{{
+                          formatThroughput(group.totalThroughput) }}</span></span>
+                        <span class="text-slate-400">上行速率: <span class="text-orange-400 font-mono">{{
+                          formatThroughput(group.UploadThroughput) }}</span></span>
+                        <span class="text-slate-400">下行速率: <span class="text-cyan-400 font-mono">{{
+                          formatThroughput(group.DownloadThroughput) }}</span></span>
+                        <span class="text-slate-400">累计上下行流量: <span class="text-slate-200 font-mono">{{
+                          formatTraffic(group.totalTraffic) }}</span></span>
+                        <span class="text-slate-400">累计上行流量: <span class="text-orange-400 font-mono">{{
+                          formatTraffic(group.totalUpload) }}</span></span>
+                        <span class="text-slate-400">累计下行流量: <span class="text-cyan-400 font-mono">{{
+                          formatTraffic(group.totalDownload) }}</span></span>
+                        <span class="text-slate-400">TCP: <span class="text-slate-200 font-mono">{{
+                          group.totalTcp }}</span></span>
+                        <span class="text-slate-400">UDP: <span class="text-slate-200 font-mono">{{
+                          group.totalUdp }}</span></span>
+                        <span class="text-slate-400">其他: <span class="text-slate-200 font-mono">{{
+                          group.totalOther }}</span></span>
+                      </div>
                     </div>
-                    <div class="flex items-center gap-4 text-xs">
-                      <span class="text-slate-400">总实时速率: <span class="text-slate-200 font-mono">{{
-                        formatThroughput(aggregationData.lan.totalThroughput) }}</span></span>
-                      <span class="text-slate-400">上行速率: <span class="text-orange-400 font-mono">{{
-                        formatThroughput(aggregationData.lan.UploadThroughput) }}</span></span>
-                      <span class="text-slate-400">下行速率: <span class="text-cyan-400 font-mono">{{
-                        formatThroughput(aggregationData.lan.DownloadThroughput) }}</span></span>
-                      <span class="text-slate-400">累计上下行流量: <span class="text-slate-200 font-mono">{{
-                        formatTraffic(aggregationData.lan.totalTraffic) }}</span></span>
-                      <span class="text-slate-400">累计上行流量: <span class="text-orange-400 font-mono">{{
-                        formatTraffic(aggregationData.lan.totalUpload) }}</span></span>
-                      <span class="text-slate-400">累计下行流量: <span class="text-cyan-400 font-mono">{{
-                        formatTraffic(aggregationData.lan.totalDownload) }}</span></span>
-                      <span class="text-slate-400">TCP: <span class="text-slate-200 font-mono">{{
-                        aggregationData.lan.totalTcp }}</span></span>
-                      <span class="text-slate-400">UDP: <span class="text-slate-200 font-mono">{{
-                        aggregationData.lan.totalUdp }}</span></span>
-                      <span class="text-slate-400">其他: <span class="text-slate-200 font-mono">{{
-                        aggregationData.lan.totalOther }}</span></span>
-                    </div>
-                  </div>
-                </td>
-              </tr>
-              <!-- 局域网IP详细行 -->
-              <tr v-for="ipStats in aggregationData.lan.ips" :key="ipStats.ip" v-show="!uiState.ipGroupCollapsed.lan"
-                class="hover:bg-slate-700/30 transition-colors">
-                <td class="px-3 py-2 text-center">
-                  <span class="font-mono text-slate-300">{{ ipStats.ip }}</span>
-                </td>
-                <td class="px-3 py-2 text-center">
-                  <span class="font-mono text-slate-200">{{
-                    BytesFixed(ipStats.totalThroughput.value, ipStats.totalThroughput.unit) }} {{
-                      ipStats.totalThroughput.unit
-                    }}</span>
-                </td>
-                <td class="px-3 py-2 text-center">
-                  <span class="font-mono text-orange-400">{{
-                    BytesFixed(ipStats.uploadThroughput.value, ipStats.uploadThroughput.unit) }} {{
-                      ipStats.uploadThroughput.unit
-                    }}</span>
-                </td>
-                <td class="px-3 py-2 text-center">
-                  <span class="font-mono text-cyan-400">{{
-                    BytesFixed(ipStats.downloadThroughput.value, ipStats.downloadThroughput.unit) }} {{
-                      ipStats.downloadThroughput.unit
-                    }}</span>
-                </td>
-                <td class="px-3 py-2 text-center">
-                  <span class="font-mono text-slate-200">{{
-                    BytesFixed(ipStats.totalTraffic.value, ipStats.totalTraffic.unit) }} {{
-                      ipStats.totalTraffic.unit
-                    }}</span>
-                </td>
-                <td class="px-3 py-2 text-center">
-                  <span class="font-mono text-orange-400">{{
-                    BytesFixed(ipStats.totalUpload.value, ipStats.totalUpload.unit) }} {{
-                      ipStats.totalUpload.unit
-                    }}</span>
-                </td>
-                <td class="px-3 py-2 text-center">
-                  <span class="font-mono text-cyan-400">{{
-                    BytesFixed(ipStats.totalDownload.value, ipStats.totalDownload.unit) }} {{
-                      ipStats.totalDownload.unit
-                    }}</span>
-                </td>
-                <td class="px-3 py-2 text-center">
-                  <span class="font-mono text-slate-200">{{ ipStats.tcpCount }}</span>
-                </td>
-                <td class="px-3 py-2 text-center">
-                  <span class="font-mono text-slate-200">{{ ipStats.udpCount }}</span>
-                </td>
-                <td class="px-3 py-2 text-center">
-                  <span class="font-mono text-slate-200">{{ ipStats.otherCount }}</span>
-                </td>
-              </tr>
-              <tr v-if="aggregationData.lan.ips.length === 0 && !uiState.ipGroupCollapsed.lan">
-                <td colspan="10" class="px-5 py-4 text-center text-slate-500 text-xs">暂无局域网IP数据</td>
-              </tr>
-
-              <!-- 外网IP分组 -->
-              <tr class="bg-slate-700/30 hover:bg-slate-700/50 transition-colors cursor-pointer"
-                @click="toggleIpGroup('wan')">
-                <td colspan="10" class="px-3 py-3 text-left">
-                  <div class="flex items-center justify-between">
-                    <div class="flex items-center gap-2">
-                      <span class="text-slate-500 transition-transform duration-300"
-                        :class="{ 'rotate-180': !uiState.ipGroupCollapsed.wan }">▼</span>
-                      <span class="font-semibold text-slate-200">{{ aggregationData.wan.name }}</span>
-                      <span class="text-xs text-slate-500">({{ aggregationData.wan.ips.length }} 个 IP)</span>
-                    </div>
-                    <div class="flex items-center gap-4 text-xs">
-                      <span class="text-slate-400">总实时速率: <span class="text-slate-200 font-mono">{{
-                        formatThroughput(aggregationData.wan.totalThroughput) }}</span></span>
-                      <span class="text-slate-400">上行速率: <span class="text-orange-400 font-mono">{{
-                        formatThroughput(aggregationData.wan.UploadThroughput) }}</span></span>
-                      <span class="text-slate-400">下行速率: <span class="text-cyan-400 font-mono">{{
-                        formatThroughput(aggregationData.wan.DownloadThroughput) }}</span></span>
-                      <span class="text-slate-400">累计上下行流量: <span class="text-slate-200 font-mono">{{
-                        formatTraffic(aggregationData.wan.totalTraffic) }}</span></span>
-                      <span class="text-slate-400">累计上行流量: <span class="text-orange-400 font-mono">{{
-                        formatTraffic(aggregationData.wan.totalUpload) }}</span></span>
-                      <span class="text-slate-400">累计下行流量: <span class="text-cyan-400 font-mono">{{
-                        formatTraffic(aggregationData.wan.totalDownload) }}</span></span>
-                      <span class="text-slate-400">TCP: <span class="text-slate-200 font-mono">{{
-                        aggregationData.wan.totalTcp }}</span></span>
-                      <span class="text-slate-400">UDP: <span class="text-slate-200 font-mono">{{
-                        aggregationData.wan.totalUdp }}</span></span>
-                      <span class="text-slate-400">其他: <span class="text-slate-200 font-mono">{{
-                        aggregationData.wan.totalOther }}</span></span>
-                    </div>
-                  </div>
-                </td>
-              </tr>
-              <!-- 外网IP详细行 -->
-              <tr v-for="ipStats in aggregationData.wan.ips" :key="ipStats.ip" v-show="!uiState.ipGroupCollapsed.wan"
-                class="hover:bg-slate-700/30 transition-colors">
-                <td class="px-3 py-2 text-center">
-                  <span class="font-mono text-slate-300">{{ ipStats.ip }}</span>
-                </td>
-                <td class="px-3 py-2 text-center">
-                  <span class="font-mono text-slate-200">{{ BytesFixed(ipStats.totalThroughput.value,
-                    ipStats.totalThroughput.unit) }} {{
-                      ipStats.totalThroughput.unit
-                    }}</span>
-                </td>
-                <td class="px-3 py-2 text-center">
-                  <span class="font-mono text-orange-400">{{ BytesFixed(ipStats.uploadThroughput.value,
-                    ipStats.uploadThroughput.unit) }} {{
-                      ipStats.uploadThroughput.unit
-                    }}</span>
-                </td>
-                <td class="px-3 py-2 text-center">
-                  <span class="font-mono text-cyan-400">{{ BytesFixed(ipStats.downloadThroughput.value,
-                    ipStats.downloadThroughput.unit) }} {{
-                      ipStats.downloadThroughput.unit
-                    }}</span>
-                </td>
-                <td class="px-3 py-2 text-center">
-                  <span class="font-mono text-slate-200">{{ BytesFixed(ipStats.totalTraffic.value,
-                    ipStats.totalTraffic.unit) }} {{
-                      ipStats.totalTraffic.unit
-                    }}</span>
-                </td>
-                <td class="px-3 py-2 text-center">
-                  <span class="font-mono text-orange-400">{{ BytesFixed(ipStats.totalUpload.value,
-                    ipStats.totalUpload.unit) }} {{
-                      ipStats.totalUpload.unit
-                    }}</span>
-                </td>
-                <td class="px-3 py-2 text-center">
-                  <span class="font-mono text-cyan-400">{{ BytesFixed(ipStats.totalDownload.value,
-                    ipStats.totalDownload.unit) }} {{
-                      ipStats.totalDownload.unit
-                    }}</span>
-                </td>
-                <td class="px-3 py-2 text-center">
-                  <span class="font-mono text-slate-200">{{ ipStats.tcpCount }}</span>
-                </td>
-                <td class="px-3 py-2 text-center">
-                  <span class="font-mono text-slate-200">{{ ipStats.udpCount }}</span>
-                </td>
-                <td class="px-3 py-2 text-center">
-                  <span class="font-mono text-slate-200">{{ ipStats.otherCount }}</span>
-                </td>
-              </tr>
-              <tr v-if="aggregationData.wan.ips.length === 0 && !uiState.ipGroupCollapsed.wan">
-                <td colspan="10" class="px-5 py-4 text-center text-slate-500 text-xs">暂无外网IP数据</td>
-              </tr>
-
-              <!-- 未知IP分组 -->
-              <tr class="bg-slate-700/30 hover:bg-slate-700/50 transition-colors cursor-pointer"
-                @click="toggleIpGroup('unknown')">
-                <td colspan="10" class="px-3 py-3 text-left">
-                  <div class="flex items-center justify-between">
-                    <div class="flex items-center gap-2">
-                      <span class="text-slate-500 transition-transform duration-300"
-                        :class="{ 'rotate-180': !uiState.ipGroupCollapsed.unknown }">▼</span>
-                      <span class="font-semibold text-slate-200">{{ aggregationData.unknown.name }}</span>
-                      <span class="text-xs text-slate-500">({{ aggregationData.unknown.ips.length }} 个 IP)</span>
-                    </div>
-                    <div class="flex items-center gap-4 text-xs">
-                      <span class="text-slate-400">总实时速率: <span class="text-slate-200 font-mono">{{
-                        formatThroughput(aggregationData.unknown.totalThroughput) }}</span></span>
-                      <span class="text-slate-400">上行速率: <span class="text-orange-400 font-mono">{{
-                        formatThroughput(aggregationData.unknown.UploadThroughput) }}</span></span>
-                      <span class="text-slate-400">下行速率: <span class="text-cyan-400 font-mono">{{
-                        formatThroughput(aggregationData.unknown.DownloadThroughput) }}</span></span>
-                      <span class="text-slate-400">累计上下行流量: <span class="text-slate-200 font-mono">{{
-                        formatTraffic(aggregationData.unknown.totalTraffic) }}</span></span>
-                      <span class="text-slate-400">累计上行流量: <span class="text-orange-400 font-mono">{{
-                        formatTraffic(aggregationData.unknown.totalUpload) }}</span></span>
-                      <span class="text-slate-400">累计下行流量: <span class="text-cyan-400 font-mono">{{
-                        formatTraffic(aggregationData.unknown.totalDownload) }}</span></span>
-                      <span class="text-slate-400">TCP: <span class="text-slate-200 font-mono">{{
-                        aggregationData.unknown.totalTcp }}</span></span>
-                      <span class="text-slate-400">UDP: <span class="text-slate-200 font-mono">{{
-                        aggregationData.unknown.totalUdp }}</span></span>
-                      <span class="text-slate-400">其他: <span class="text-slate-200 font-mono">{{
-                        aggregationData.unknown.totalOther }}</span></span>
-                    </div>
-                  </div>
-                </td>
-              </tr>
-              <!-- 未知IP详细行 -->
-              <tr v-for="ipStats in aggregationData.unknown.ips" :key="ipStats.ip"
-                v-show="!uiState.ipGroupCollapsed.unknown" class="hover:bg-slate-700/30 transition-colors">
-                <td class="px-3 py-2 text-center">
-                  <span class="font-mono text-slate-300">{{ ipStats.ip }}</span>
-                </td>
-                <td class="px-3 py-2 text-center">
-                  <span class="font-mono text-slate-200">{{ BytesFixed(ipStats.totalThroughput.value,
-                    ipStats.totalThroughput.unit) }} {{
-                      ipStats.totalThroughput.unit
-                    }}</span>
-                </td>
-                <td class="px-3 py-2 text-center">
-                  <span class="font-mono text-orange-400">{{ BytesFixed(ipStats.uploadThroughput.value,
-                    ipStats.uploadThroughput.unit) }} {{
-                      ipStats.uploadThroughput.unit
-                    }}</span>
-                </td>
-                <td class="px-3 py-2 text-center">
-                  <span class="font-mono text-cyan-400">{{ BytesFixed(ipStats.downloadThroughput.value,
-                    ipStats.downloadThroughput.unit) }} {{
-                      ipStats.downloadThroughput.unit
-                    }}</span>
-                </td>
-                <td class="px-3 py-2 text-center">
-                  <span class="font-mono text-slate-200">{{ BytesFixed(ipStats.totalTraffic.value,
-                    ipStats.totalTraffic.unit) }} {{
-                      ipStats.totalTraffic.unit
-                    }}</span>
-                </td>
-                <td class="px-3 py-2 text-center">
-                  <span class="font-mono text-orange-400">{{ BytesFixed(ipStats.totalUpload.value,
-                    ipStats.totalUpload.unit) }} {{
-                      ipStats.totalUpload.unit
-                    }}</span>
-                </td>
-                <td class="px-3 py-2 text-center">
-                  <span class="font-mono text-cyan-400">{{ BytesFixed(ipStats.totalDownload.value,
-                    ipStats.totalDownload.unit) }} {{
-                      ipStats.totalDownload.unit
-                    }}</span>
-                </td>
-                <td class="px-3 py-2 text-center">
-                  <span class="font-mono text-slate-200">{{ ipStats.tcpCount }}</span>
-                </td>
-                <td class="px-3 py-2 text-center">
-                  <span class="font-mono text-slate-200">{{ ipStats.udpCount }}</span>
-                </td>
-                <td class="px-3 py-2 text-center">
-                  <span class="font-mono text-slate-200">{{ ipStats.otherCount }}</span>
-                </td>
-              </tr>
-              <tr v-if="aggregationData.unknown.ips.length === 0 && !uiState.ipGroupCollapsed.unknown">
-                <td colspan="10" class="px-5 py-4 text-center text-slate-500 text-xs">暂无未知IP数据</td>
-              </tr>
+                  </td>
+                </tr>
+                <!-- 分组详细行 -->
+                <tr v-for="ipStats in group.ips" :key="ipStats.ip" v-show="!uiState.ipGroupCollapsed[group.key]"
+                  class="hover:bg-slate-700/30 transition-colors">
+                  <td class="px-3 py-2 text-center">
+                    <span class="font-mono text-slate-300">{{ ipStats.ip }}</span>
+                  </td>
+                  <td class="px-3 py-2 text-center">
+                    <span class="font-mono text-slate-200">{{
+                      BytesFixed(ipStats.totalThroughput.value, ipStats.totalThroughput.unit) }} {{
+                        ipStats.totalThroughput.unit
+                      }}</span>
+                  </td>
+                  <td class="px-3 py-2 text-center">
+                    <span class="font-mono text-orange-400">{{
+                      BytesFixed(ipStats.uploadThroughput.value, ipStats.uploadThroughput.unit) }} {{
+                        ipStats.uploadThroughput.unit
+                      }}</span>
+                  </td>
+                  <td class="px-3 py-2 text-center">
+                    <span class="font-mono text-cyan-400">{{
+                      BytesFixed(ipStats.downloadThroughput.value, ipStats.downloadThroughput.unit) }} {{
+                        ipStats.downloadThroughput.unit
+                      }}</span>
+                  </td>
+                  <td class="px-3 py-2 text-center">
+                    <span class="font-mono text-slate-200">{{
+                      BytesFixed(ipStats.totalTraffic.value, ipStats.totalTraffic.unit) }} {{
+                        ipStats.totalTraffic.unit
+                      }}</span>
+                  </td>
+                  <td class="px-3 py-2 text-center">
+                    <span class="font-mono text-orange-400">{{
+                      BytesFixed(ipStats.totalUpload.value, ipStats.totalUpload.unit) }} {{
+                        ipStats.totalUpload.unit
+                      }}</span>
+                  </td>
+                  <td class="px-3 py-2 text-center">
+                    <span class="font-mono text-cyan-400">{{
+                      BytesFixed(ipStats.totalDownload.value, ipStats.totalDownload.unit) }} {{
+                        ipStats.totalDownload.unit
+                      }}</span>
+                  </td>
+                  <td class="px-3 py-2 text-center">
+                    <span class="font-mono text-slate-200">{{ ipStats.tcpCount }}</span>
+                  </td>
+                  <td class="px-3 py-2 text-center">
+                    <span class="font-mono text-slate-200">{{ ipStats.udpCount }}</span>
+                  </td>
+                  <td class="px-3 py-2 text-center">
+                    <span class="font-mono text-slate-200">{{ ipStats.otherCount }}</span>
+                  </td>
+                </tr>
+                <!-- 空数据提示 -->
+                <tr v-if="group.ips.length === 0 && !uiState.ipGroupCollapsed[group.key]">
+                  <td colspan="10" class="px-5 py-4 text-center text-slate-500 text-xs">暂无{{ group.name }}数据</td>
+                </tr>
+              </template>
             </tbody>
           </table>
         </div>
