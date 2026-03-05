@@ -152,8 +152,8 @@ func (b *BackgroundService) UpdateAggregationTrafficMetric() {
 		time.Duration(1)*time.Second,
 		jsonBytes,
 	)
-
 }
+
 func (b *BackgroundService) UpdateNetworkConnectionDetails() {
 	updateInterval := b.UpdateNetworkConnectionDetailsInterval
 

@@ -50,6 +50,16 @@ type CacheValue struct {
 	Data     []byte
 }
 
+type CacheStringValue struct {
+	UpdateAt time.Time
+	ExpireAt time.Time
+	Data     string
+}
+type CacheDnsValue struct {
+	ExpireAt time.Time
+	Data     []string
+}
+
 type NetSnapUnit struct {
 	RxBytes float64
 	TxBytes float64
@@ -241,3 +251,5 @@ type MetricUnit struct {
 	Value float64 `json:"value"`
 	Unit  string  `json:"unit"`
 }
+
+type DnsResult map[string][]string

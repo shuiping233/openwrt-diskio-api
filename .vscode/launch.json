@@ -21,10 +21,15 @@
                 // "60",
                 // "--network-connection-interval",
                 // "10",
-                // "--traffic-capture-interface-name",
-                // "eth1",
+                "--traffic-capture-interface-name",
+                "eth1",
                 // "--traffic-key-expired-time",
                 // "10",
+                // "--dns-server-ip",
+                // "127.0.0.1",
+                // "--dns-query-timeout",
+                // "10",
+
             ]
         }
     ]
