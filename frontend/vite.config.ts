@@ -53,7 +53,13 @@ export default defineConfig({
         // target: 'http://192.168.0.1:81/', // 转发给 Go 后端的地址
         changeOrigin: true,
         rewrite: (path) => path // 保持路径不变
-      }
+      },
+      '/dns': {
+        target: 'http://127.0.0.1:8080', // 转发给 Go 后端的地址
+        // target: 'http://192.168.0.1:81/', // 转发给 Go 后端的地址
+        changeOrigin: true,
+        rewrite: (path) => path // 保持路径不变
+      },
     }
   }
 })
