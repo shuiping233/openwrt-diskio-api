@@ -985,16 +985,6 @@ watch(() => aggregationData.value, () => {
             <span class="text-sm text-slate-300">启用 DNS 查询</span>
             <span v-if="isDnsQuerying" class="text-xs text-blue-400 animate-pulse">查询中...</span>
           </label>
-          <!-- 全局搜索框 -->
-          <div class="relative" @click.stop>
-            <input v-model="aggregationFilter" placeholder="搜索 IP、流量、连接数..."
-              class="bg-slate-900 border border-slate-600 text-white text-xs px-3 py-1.5 pr-8 rounded w-56 outline-none focus:border-blue-400" />
-            <button v-if="aggregationFilter" @click="aggregationFilter = ''"
-              class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 text-xs w-4 h-4 flex items-center justify-center rounded hover:bg-slate-700 transition-colors"
-              title="清空搜索">
-              ×
-            </button>
-          </div>
           <span class="text-slate-500 transition-transform duration-300"
             :class="{ 'rotate-180': uiState.accordions.aggregation }">▼</span>
         </div>
@@ -1003,6 +993,19 @@ watch(() => aggregationData.value, () => {
       <!-- 聚合统计内容 -->
       <div v-show="uiState.accordions.aggregation"
         class="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden">
+        <!-- 全局搜索框（单独一行，居右）带清空按钮 -->
+        <div class="px-4 py-3 border-b border-slate-700 flex justify-end">
+          <div class="relative">
+            <input v-model="aggregationFilter" placeholder="搜索 IP、流量、连接数..."
+              class="bg-slate-900 border border-slate-600 text-white text-xs px-3 py-1.5 pr-8 rounded w-56 outline-none focus:border-blue-400" />
+            <button v-if="aggregationFilter" @click="aggregationFilter = ''"
+              class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 text-xs w-4 h-4 flex items-center justify-center rounded hover:bg-slate-700 transition-colors"
+              title="清空搜索">
+              ×
+            </button>
+          </div>
+        </div>
+
         <div class="overflow-x-auto">
           <table class="w-full text-sm text-center border-collapse">
             <thead class="bg-slate-700/50 text-slate-300">
@@ -1194,16 +1197,6 @@ watch(() => aggregationData.value, () => {
               class="w-4 h-4 rounded border-slate-600 text-blue-500 focus:ring-blue-500 bg-slate-700" />
             <span class="text-sm text-slate-300">启用 DNS 查询</span>
           </label>
-          <!-- 全局搜索框 -->
-          <div class="relative" @click.stop>
-            <input v-model="globalFilter" placeholder="全局搜索..."
-              class="bg-slate-900 border border-slate-600 text-white text-xs px-3 py-1.5 pr-8 rounded w-56 outline-none focus:border-blue-400" />
-            <button v-if="globalFilter" @click="globalFilter = ''"
-              class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 text-xs w-4 h-4 flex items-center justify-center rounded hover:bg-slate-700 transition-colors"
-              title="清空搜索">
-              ×
-            </button>
-          </div>
           <span class="text-slate-500 transition-transform duration-300"
             :class="{ 'rotate-180': uiState.accordions.connectionList }">▼</span>
         </div>
@@ -1212,7 +1205,18 @@ watch(() => aggregationData.value, () => {
       <!-- 连接列表内容 -->
       <div v-show="uiState.accordions.connectionList"
         class="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden">
-        <!-- 表格内容 -->
+        <!-- 全局搜索框（单独一行，居右）带清空按钮 -->
+        <div class="px-4 py-3 border-b border-slate-700 flex justify-end">
+          <div class="relative">
+            <input v-model="globalFilter" placeholder="全局搜索..."
+              class="bg-slate-900 border border-slate-600 text-white text-xs px-3 py-1.5 pr-8 rounded w-56 outline-none focus:border-blue-400" />
+            <button v-if="globalFilter" @click="globalFilter = ''"
+              class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 text-xs w-4 h-4 flex items-center justify-center rounded hover:bg-slate-700 transition-colors"
+              title="清空搜索">
+              ×
+            </button>
+          </div>
+        </div>
 
         <div class="overflow-x-auto">
           <table class="w-full text-sm text-center border-collapse">
