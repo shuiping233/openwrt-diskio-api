@@ -1002,6 +1002,9 @@ const initialSorting = [{ id: 'traffic', desc: true }] as SortingState;
 // 列过滤器状态
 const columnFilters = ref<ColumnFiltersState>([]);
 
+// 排序状态
+const sorting = ref<SortingState>(initialSorting);
+
 const table = useVueTable({
   data: displayData,
   columns,
@@ -1031,7 +1034,9 @@ const table = useVueTable({
     get globalFilter() {
       return globalFilter.value;
     },
-    sorting: initialSorting,
+    get sorting() {
+      return sorting.value;
+    },
   },
   globalFilterFn: (row, columnId, value) => {
     const search = String(value).toLowerCase().replace(/\s+/g, '');
@@ -1090,13 +1095,18 @@ const table = useVueTable({
       : updater;
     globalFilter.value = newFilter;
   },
+  onSortingChange: (updater) => {
+    const newSorting = typeof updater === 'function'
+      ? updater(sorting.value)
+      : updater;
+    sorting.value = newSorting;
+  },
 });
 
 // 获取排序状态的显示
 const getConnectionSortIcon = (columnId: string): string => {
-  const sorting = table.getState().sorting;
-  if (sorting.length === 0 || sorting[0].id !== columnId) return '';
-  return sorting[0].desc ? '↓' : '↑';
+  if (sorting.value.length === 0 || sorting.value[0].id !== columnId) return '';
+  return sorting.value[0].desc ? '↓' : '↑';
 };
 </script>
 
