@@ -54,7 +54,8 @@ func (dqs *DnsQueryService) LookupAddr(ips []string) (model.DnsResult, error) {
 		names, err := dqs.resolver.LookupAddr(ctx, ip)
 		cancel()
 		if err != nil {
-			log.Printf("Dns query for %q failed: %s\n", ip, err)
+			// 查询失败如果打印出来会导致有几吨的日志
+			// log.Printf("Dns query for %q failed: %s\n", ip, err)
 			continue
 		}
 		hostnameList := make([]string, 0, len(names))
