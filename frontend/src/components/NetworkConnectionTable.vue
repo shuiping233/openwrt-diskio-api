@@ -300,9 +300,9 @@ const aggregationData = computed((): { lan: GroupStats; wan: GroupStats; unknown
       totalTraffic: ips.reduce((sum, ip) => sum + ip.traffic.bytes, 0),
       totalUpload: ips.reduce((sum, ip) => sum + ip.upload.bytes, 0),
       totalDownload: ips.reduce((sum, ip) => sum + ip.download.bytes, 0),
-      totalTcp: ips.reduce((sum, ip) => sum + (ip.tcpCount >= 0 ? ip.tcpCount : 0), -1),
-      totalUdp: ips.reduce((sum, ip) => sum + (ip.udpCount >= 0 ? ip.udpCount : 0), -1),
-      totalOther: ips.reduce((sum, ip) => sum + (ip.otherCount >= 0 ? ip.otherCount : 0), -1),
+      totalTcp: ips.reduce((sum, ip) => sum + (ip.tcpCount >= 0 ? ip.tcpCount : 0), 0),
+      totalUdp: ips.reduce((sum, ip) => sum + (ip.udpCount >= 0 ? ip.udpCount : 0), 0),
+      totalOther: ips.reduce((sum, ip) => sum + (ip.otherCount >= 0 ? ip.otherCount : 0), 0),
     };
   };
 
