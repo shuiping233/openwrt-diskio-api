@@ -40,8 +40,8 @@ struct {
  * 2. 提高在大流量压测下的数据稳定性。
  */
 struct {
-    __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
-    __uint(max_entries, 65535);
+    __uint(type, BPF_MAP_TYPE_LRU_PERCPU_HASH); // 改为 LRU 类型
+    __uint(max_entries, 32768); // 减小一点容量以换取更高的缓存命中率
     __type(key, struct flow_key);
     __type(value, struct flow_stats);
 } flow_map SEC(".maps");

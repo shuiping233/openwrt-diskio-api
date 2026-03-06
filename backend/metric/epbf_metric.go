@@ -5,9 +5,11 @@ package metric
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"log"
 	"net/netip"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -22,10 +24,17 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+const EbpfBatchLookupSize = 1024
+
 type IPMetrics struct {
-	IP            string
-	UploadRate    float64
-	DownloadRate  float64
+	IP string
+	// 瞬时累加速率 (每秒 frame 开始时清零)
+	UploadRate   float64
+	DownloadRate float64
+	// 平滑后的显示速率 (用于输出给前端)
+	SmoothUploadRate   float64
+	SmoothDownloadRate float64
+	// 累计总量
 	TotalUpload   uint64
 	TotalDownload uint64
 }
@@ -110,7 +119,11 @@ func (svc *EbpfNetTrafficService) frame(
 		return
 	}
 
-	// 1. 获取精准的采样时间间隔
+	// 1. 基础清理与时间计算
+	if len(lastSnapshots) > 100000 {
+		clear(lastSnapshots)
+	}
+
 	now := time.Now()
 	if svc.lastFrameTime.IsZero() {
 		svc.lastFrameTime = now.Add(-1 * time.Second)
@@ -118,13 +131,12 @@ func (svc *EbpfNetTrafficService) frame(
 	duration := now.Sub(svc.lastFrameTime).Seconds()
 	svc.lastFrameTime = now
 
-	lastUnix := atomic.LoadInt64(&svc.lastRequestTimeUnix)
-	lastTime := time.Unix(0, lastUnix)
-
 	svc.mutex.Lock()
 	defer svc.mutex.Unlock()
 
-	if time.Since(lastTime) > keyExpiredTime {
+	// 2. 活跃状态检查
+	lastUnix := atomic.LoadInt64(&svc.lastRequestTimeUnix)
+	if time.Since(time.Unix(0, lastUnix)) > keyExpiredTime {
 		stopCapture(objs)
 		clearFlowMap(objs.FlowMap)
 		clear(svc.metricsMap)
@@ -132,56 +144,80 @@ func (svc *EbpfNetTrafficService) frame(
 		return
 	}
 
-	nowKtime := getKtimeNS()
-	timeout := uint64(keyExpiredTime)
-
-	// 重置当前速率
 	for _, m := range svc.metricsMap {
 		m.UploadRate = 0
 		m.DownloadRate = 0
 	}
 
-	var key bpf.BpfFlowKey
-	// 注意：Per-CPU Map 迭代出的是 Stats 切片
-	var vals []bpf.BpfFlowStats
-	iter := objs.FlowMap.Iterate()
+	numCPU, err := ebpf.PossibleCPU()
+	if err != nil {
+		numCPU = runtime.NumCPU() // 备选方案
+	}
 
-	for iter.Next(&key, &vals) {
-		// 2. 汇总所有 CPU 核心的数据
-		var totalBytes uint64
-		var maxLastSeen uint64
-		for _, cpuVal := range vals {
-			totalBytes += cpuVal.Bytes
-			if cpuVal.LastSeen > maxLastSeen {
-				maxLastSeen = cpuVal.LastSeen
+	// 3. BatchLookup 初始化
+	// 根据你的函数签名，不需要 prevKey
+	var (
+		batchSize = EbpfBatchLookupSize
+		keys      = make([]bpf.BpfFlowKey, EbpfBatchLookupSize)
+		// 关键：改用一维切片，总大小为 batchSize * numCPU
+		vals   = make([]bpf.BpfFlowStats, EbpfBatchLookupSize*numCPU)
+		cursor ebpf.MapBatchCursor
+	)
+
+	nowKtime := getKtimeNS()
+	timeout := uint64(keyExpiredTime.Nanoseconds())
+
+	for {
+		// 传入展平的一维 vals
+		count, err := objs.FlowMap.BatchLookup(&cursor, keys, vals, nil)
+
+		for i := 0; i < count; i++ {
+			key := keys[i]
+
+			// 计算当前 key 在一维数组中对应的 CPU 数据起始索引
+			// 每一个 key 占据 numCPU 个连续的 Stats
+			start := i * numCPU
+			end := start + numCPU
+			cpuVals := vals[start:end]
+
+			var totalBytes uint64
+			var maxLastSeen uint64
+			for _, v := range cpuVals {
+				totalBytes += v.Bytes
+				if v.LastSeen > maxLastSeen {
+					maxLastSeen = v.LastSeen
+				}
 			}
-		}
 
-		// 3. 老化检查 (使用汇总后的 maxLastSeen)
-		if nowKtime-maxLastSeen > timeout {
-			// 继续保持注释，直到性能彻底稳定
-			// objs.FlowMap.Delete(key)
-			continue
-		}
-
-		// 4. 计算 Delta
-		currentBytes := totalBytes
-		delta := uint64(0)
-		if lastBytes, ok := lastSnapshots[key]; ok {
-			if currentBytes >= lastBytes {
-				delta = currentBytes - lastBytes
+			// ... 老化与 Delta 计算逻辑 (保持不变) ...
+			if nowKtime-maxLastSeen > timeout {
+				continue
+			}
+			currentBytes := totalBytes
+			delta := uint64(0)
+			if lastBytes, ok := lastSnapshots[key]; ok {
+				if currentBytes >= lastBytes {
+					delta = currentBytes - lastBytes
+				}
 			} else {
-				// 异常处理：如果是 counter 重置（虽然 eBPF uint64 很难重置）
 				delta = currentBytes
 			}
-		} else {
-			delta = currentBytes
-		}
-		lastSnapshots[key] = currentBytes
+			lastSnapshots[key] = currentBytes
 
-		// 5. 聚合统计 (传入 duration)
-		svc.trafficAggregateWithDuration(key, delta, duration)
+			svc.trafficAggregateWithDuration(key, delta, duration)
+		}
+		if err != nil {
+			if errors.Is(err, ebpf.ErrKeyNotExist) {
+				break
+			}
+			log.Printf("BatchLookup error: %v", err)
+			break
+		}
+		if count < batchSize {
+			break
+		}
 	}
+	svc.applySmoothing()
 }
 
 func (svc *EbpfNetTrafficService) Run(ctx context.Context) {
@@ -255,21 +291,14 @@ func (svc *EbpfNetTrafficService) GetAggregationTrafficMetric() *model.Aggregati
 	defer svc.mutex.RUnlock()
 	for ip, value := range metricsMap {
 		ipStr := formatIP(ip)
-		rate, unit := utils.ConvertBytes(value.DownloadRate, model.BSecond)
-		incoming := model.MetricUnit{
-			Value: rate,
-			Unit:  unit,
-		}
-		rate, unit = utils.ConvertBytes(value.UploadRate, model.BSecond)
-		outgoing := model.MetricUnit{
-			Value: rate,
-			Unit:  unit,
-		}
-		rate, unit = utils.ConvertBytes(value.DownloadRate+value.UploadRate, model.BSecond)
-		totalThroughput := model.MetricUnit{
-			Value: rate,
-			Unit:  unit,
-		}
+		rate, unit := utils.ConvertBytes(value.SmoothDownloadRate, model.BSecond)
+		incoming := model.MetricUnit{Value: rate, Unit: unit}
+
+		rate, unit = utils.ConvertBytes(value.SmoothUploadRate, model.BSecond)
+		outgoing := model.MetricUnit{Value: rate, Unit: unit}
+
+		rate, unit = utils.ConvertBytes(value.SmoothDownloadRate+value.SmoothUploadRate, model.BSecond)
+		totalThroughput := model.MetricUnit{Value: rate, Unit: unit}
 
 		total, unit := utils.ConvertBytes(float64(value.TotalDownload), model.Byte)
 		totalIncoming := model.MetricUnit{
@@ -308,6 +337,37 @@ func (svc *EbpfNetTrafficService) GetAggregationTrafficMetric() *model.Aggregati
 		})
 	}
 	return result
+}
+
+// 在 frame 函数末尾，BatchLookup 循环结束后执行：
+func (svc *EbpfNetTrafficService) applySmoothing() {
+	// 建议 Alpha 设为 0.3 - 0.5 之间
+	// 0.3 极其平滑，但有 1-2 秒延迟；0.5 反应快，但仍有轻微跳动
+	const alpha = 0.4
+
+	for _, m := range svc.metricsMap {
+		// 对上传速率进行平滑
+		if m.SmoothUploadRate == 0 {
+			m.SmoothUploadRate = m.UploadRate
+		} else {
+			m.SmoothUploadRate = (alpha * m.UploadRate) + ((1 - alpha) * m.SmoothUploadRate)
+		}
+
+		// 对下载速率进行平滑
+		if m.SmoothDownloadRate == 0 {
+			m.SmoothDownloadRate = m.DownloadRate
+		} else {
+			m.SmoothDownloadRate = (alpha * m.DownloadRate) + ((1 - alpha) * m.SmoothDownloadRate)
+		}
+
+		// 补偿：如果平滑后的值极小（比如小于 1B/s），直接归零，防止 UI 长期显示微小余波
+		if m.SmoothUploadRate < 1 {
+			m.SmoothUploadRate = 0
+		}
+		if m.SmoothDownloadRate < 1 {
+			m.SmoothDownloadRate = 0
+		}
+	}
 }
 
 func (svc *EbpfNetTrafficService) trafficAggregateWithDuration(key bpf.BpfFlowKey, delta uint64, duration float64) {
@@ -524,17 +584,25 @@ func clearFlowMap(m *ebpf.Map) {
 	if m == nil {
 		return
 	}
-
-	var keys []bpf.BpfFlowKey
 	var key bpf.BpfFlowKey
-	var vals []bpf.BpfFlowStats // 改为切片
+	var keys []bpf.BpfFlowKey
 
+	// 先收集所有 Key
 	iter := m.Iterate()
-	for iter.Next(&key, &vals) {
+	for iter.Next(&key, nil) {
 		keys = append(keys, key)
 	}
 
-	for _, k := range keys {
-		_ = m.Delete(k)
+	if len(keys) == 0 {
+		return
+	}
+
+	// 批量删除
+	_, err := m.BatchDelete(keys, nil)
+	if err != nil {
+		// 如果内核不支持 BatchDelete，降级回普通循环删除
+		for _, k := range keys {
+			_ = m.Delete(k)
+		}
 	}
 }
