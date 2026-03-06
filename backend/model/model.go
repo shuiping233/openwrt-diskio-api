@@ -11,6 +11,13 @@ const (
 	NetConnectionIndexState    = 5 // 只有 TCP 有
 )
 
+type IpFamilyType string
+
+const (
+	IpFamilyTypeIpv4 IpFamilyType = "ipv4"
+	IpFamilyTypeIpv6 IpFamilyType = "ipv6"
+)
+
 type IpAddressType string
 
 const (
@@ -239,6 +246,7 @@ type AggregationTrafficMetric struct {
 type AggregationTrafficDetails struct {
 	Ip              string        `json:"ip"`
 	IpType          IpAddressType `json:"ip_type"`
+	IpFamily        IpFamilyType  `json:"ip_family"`
 	Incoming        MetricUnit    `json:"incoming"`
 	Outgoing        MetricUnit    `json:"outgoing"`
 	TotalThroughput MetricUnit    `json:"total_throughput"`

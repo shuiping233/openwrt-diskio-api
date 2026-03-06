@@ -4,9 +4,10 @@ package metric
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	"log"
-	"net"
+	"net/netip"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -31,13 +32,15 @@ type IPMetrics struct {
 
 type EbpfNetTrafficService struct {
 	captureInterface    string
-	interfaceIp         uint32
-	interfaceCIDR       *net.IPNet
+	interfaceIpv4       netip.Addr
+	interfaceIpv4Prefix netip.Prefix
+	interfaceIpv6       netip.Addr
+	interfaceIpv6Prefix netip.Prefix
 	keyExpiredTime      time.Duration
 	activeChan          chan struct{}
 	objs                *bpf.BpfObjects
 	link                netlink.Link
-	metricsMap          map[uint32]*IPMetrics
+	metricsMap          map[netip.Addr]*IPMetrics
 	mutex               sync.RWMutex
 	lastRequestTimeUnix int64
 	captureStartAt      int64
@@ -47,30 +50,29 @@ func NewEbpfNetTrafficService(keyExpiredTime time.Duration) *EbpfNetTrafficServi
 	return &EbpfNetTrafficService{
 		keyExpiredTime: keyExpiredTime,
 		activeChan:     make(chan struct{}, 1),
-		metricsMap:     make(map[uint32]*IPMetrics),
+		metricsMap:     make(map[netip.Addr]*IPMetrics),
 		captureStartAt: time.Now().UnixNano(),
 	}
 }
 
 func (svc *EbpfNetTrafficService) InitEbpfInterfaceDevice(targetInterface string) error {
 	svc.captureInterface = targetInterface
-
-	cidr, err := utils.GetInterfaceIpv4CIDR(targetInterface)
+	ipv4, ipv4Prefix, err := utils.GetInterfaceIpv4Info(targetInterface)
 	if err != nil {
 		return err
 	}
-	ip, ipNet, err := net.ParseCIDR(cidr)
+	log.Printf("Get %q interface ipv4: %q \n", targetInterface, ipv4.String())
+	log.Printf("Get %q interface ipv4Prefix: %q \n", targetInterface, ipv4Prefix.String())
+	ipv6, ipv6Prefix, err := utils.GetInterfaceGuaIpv6Info(targetInterface)
 	if err != nil {
 		return err
 	}
-	ipv4 := ip.To4()
-	if ipv4 == nil {
-		return fmt.Errorf("Interface %s does not have a valid IPv4 address", targetInterface)
-	}
-
-	// 这里的位移顺序要对应 formatIP: byte(n), byte(n>>8), byte(n>>16), byte(n>>24)
-	svc.interfaceIp = uint32(ipv4[0]) | uint32(ipv4[1])<<8 | uint32(ipv4[2])<<16 | uint32(ipv4[3])<<24
-	svc.interfaceCIDR = ipNet
+	log.Printf("Get %q interface ipv6: %q \n", targetInterface, ipv6.String())
+	log.Printf("Get %q interface ipv6Prefix: %q \n", targetInterface, ipv6Prefix.String())
+	svc.interfaceIpv4 = ipv4
+	svc.interfaceIpv4Prefix = ipv4Prefix
+	svc.interfaceIpv6 = ipv6
+	svc.interfaceIpv6Prefix = ipv6Prefix
 
 	if err := rlimit.RemoveMemlock(); err != nil {
 		return fmt.Errorf("Try to remove ebpf memory lock failed: %w", err)
@@ -160,9 +162,14 @@ func (svc *EbpfNetTrafficService) frame(
 }
 
 func (svc *EbpfNetTrafficService) Run(ctx context.Context) {
-
+	updateChan, done, err := subscribeNetworkChanges()
+	if err != nil {
+		log.Fatalln(err)
+	}
+	defer close(done)
+	go svc.WatchNetworkChanges(ctx, updateChan)
+	
 	objs := svc.objs
-
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
@@ -257,9 +264,15 @@ func (svc *EbpfNetTrafficService) GetAggregationTrafficMetric() *model.Aggregati
 			Unit:  unit,
 		}
 
+		ipFamily := model.IpFamilyTypeIpv4
+		if ip.Is6() {
+			ipFamily = model.IpFamilyTypeIpv6
+		}
+
 		result.Details = append(result.Details, model.AggregationTrafficDetails{
 			Ip:              ipStr,
 			IpType:          model.IpAddressTypeLan, // TODO 先写死,因为其他类型的ip流量抓取还没做
+			IpFamily:        ipFamily,
 			Incoming:        incoming,
 			Outgoing:        outgoing,
 			TotalThroughput: totalThroughput,
@@ -274,24 +287,87 @@ func (svc *EbpfNetTrafficService) GetAggregationTrafficMetric() *model.Aggregati
 	return result
 }
 
-func (svc *EbpfNetTrafficService) trafficAggregate(key bpf.BpfFlowKey, delta uint64, res map[uint32]*IPMetrics) {
+func (svc *EbpfNetTrafficService) trafficAggregate(key bpf.BpfFlowKey, delta uint64, res map[netip.Addr]*IPMetrics) {
 	rateByte := float64(delta)
+	srcAddr := svc.parseToAddr(key.SrcAddr, key.Family)
+	dstAddr := svc.parseToAddr(key.DstAddr, key.Family)
 
-	// 只统计局域网段 IP 的流量, 且不统计自身网口的 IP 的流量
-	if key.SrcIp != svc.interfaceIp && svc.IsInLocalSubnet(key.SrcIp) {
-		m := getOrCreateMetrics(key.SrcIp, res)
-		m.UploadRate += rateByte
-		m.TotalUpload += delta
+	// TODO 暂时不过滤openwrt自身ipv6地址,看看什么效果先
+	if srcAddr != svc.interfaceIpv4 && svc.IsInLocalSubnet(srcAddr) {
+		metric := getOrCreateMetrics(srcAddr, res)
+		metric.UploadRate += rateByte
+		metric.TotalUpload += delta
 	}
 
-	if key.DstIp != svc.interfaceIp && svc.IsInLocalSubnet(key.DstIp) {
-		m := getOrCreateMetrics(key.DstIp, res)
-		m.DownloadRate += rateByte
-		m.TotalDownload += delta
+	if dstAddr != svc.interfaceIpv4 && svc.IsInLocalSubnet(dstAddr) {
+		metric := getOrCreateMetrics(dstAddr, res)
+		metric.DownloadRate += rateByte
+		metric.TotalDownload += delta
+	}
+
+}
+
+func (svc *EbpfNetTrafficService) parseToAddr(addr [4]uint32, family uint8) netip.Addr {
+	if family == 2 { // AF_INET
+		// 将小端序 uint32 转为 4 字节数组
+		b := [4]byte{byte(addr[0]), byte(addr[0] >> 8), byte(addr[0] >> 16), byte(addr[0] >> 24)}
+		return netip.AddrFrom4(b)
+	}
+	// IPv6: 直接从 16 字节切片读取
+	b := [16]byte{}
+	binary.NativeEndian.PutUint32(b[0:4], addr[0])
+	binary.NativeEndian.PutUint32(b[4:8], addr[1])
+	binary.NativeEndian.PutUint32(b[8:12], addr[2])
+	binary.NativeEndian.PutUint32(b[12:16], addr[3])
+	return netip.AddrFrom16(b)
+}
+
+func (svc *EbpfNetTrafficService) refreshInterfaceInfo() {
+	// 防止 refresh 时 frame 函数正在读取
+	svc.mutex.Lock()
+	defer svc.mutex.Unlock()
+
+	if addr, prefix, err := utils.GetInterfaceIpv4Info(svc.captureInterface); err == nil {
+		svc.interfaceIpv4 = addr
+		svc.interfaceIpv4Prefix = prefix
+	}
+	if addr, prefix, err := utils.GetInterfaceGuaIpv6Info(svc.captureInterface); err == nil {
+		svc.interfaceIpv6 = addr
+		svc.interfaceIpv6Prefix = prefix
+		log.Printf("IPv6 Prefix updated to: %s", prefix)
+	}
+}
+func (svc *EbpfNetTrafficService) WatchNetworkChanges(ctx context.Context, ch <-chan netlink.AddrUpdate) {
+	log.Println("Watching for network interface changes...")
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case update, ok := <-ch:
+			if !ok {
+				log.Println("Netlink address update channel closed")
+				return
+			}
+			link, _ := netlink.LinkByIndex(update.LinkIndex)
+			if link != nil && link.Attrs().Name == svc.captureInterface {
+				log.Printf("Network change (NewAddr: %v) detected on %s", update.NewAddr, svc.captureInterface)
+				svc.refreshInterfaceInfo()
+			}
+		}
 	}
 }
 
-func getOrCreateMetrics(ip uint32, res map[uint32]*IPMetrics) *IPMetrics {
+// 一定要记得close(done)通道
+func subscribeNetworkChanges() (updateChan chan netlink.AddrUpdate, done chan struct{}, err error) {
+	updateChan = make(chan netlink.AddrUpdate)
+	done = make(chan struct{})
+	if err := netlink.AddrSubscribe(updateChan, done); err != nil {
+		return nil, nil, fmt.Errorf("failed to subscribe netlink addr changes: %w", err)
+	}
+	return updateChan, done, nil
+}
+
+func getOrCreateMetrics(ip netip.Addr, res map[netip.Addr]*IPMetrics) *IPMetrics {
 	if m, ok := res[ip]; ok {
 		return m
 	}
@@ -306,14 +382,27 @@ func getKtimeNS() uint64 {
 	return uint64(ts.Sec)*1e9 + uint64(ts.Nsec)
 }
 
-func (svc *EbpfNetTrafficService) IsInLocalSubnet(ip uint32) bool {
-	ipNet := svc.interfaceCIDR
-	goIP := net.IPv4(byte(ip), byte(ip>>8), byte(ip>>16), byte(ip>>24))
-	return ipNet.Contains(goIP)
+func (svc *EbpfNetTrafficService) IsInLocalSubnet(ip netip.Addr) bool {
+	if ip.Is4() {
+		return svc.interfaceIpv4Prefix.Contains(ip)
+	}
+
+	if ip.Is6() {
+		// 过滤链路本地地址 (fe80::/10)，这种流量通常不计入互联网统计
+		if ip.IsLinkLocalUnicast() {
+			return false
+		}
+		// 只有在 Prefix 有效时才进行判断
+		if !svc.interfaceIpv6Prefix.IsValid() {
+			return false
+		}
+		return svc.interfaceIpv6Prefix.Contains(ip)
+	}
+	return false
 }
 
-func formatIP(n uint32) string {
-	return net.IPv4(byte(n), byte(n>>8), byte(n>>16), byte(n>>24)).String()
+func formatIP(n netip.Addr) string {
+	return n.String()
 }
 
 // --- TC 控制 ---

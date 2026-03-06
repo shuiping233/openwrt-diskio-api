@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"net/netip"
 	"openwrt-diskio-api/backend/model"
 	"slices"
 	"strconv"
@@ -149,23 +150,52 @@ func Any(bb []bool) bool {
 	return slices.Contains(bb, true)
 }
 
-// GetInterfaceIpv4CIDR 获取指定网卡的 CIDR 字符串 (例如 "192.168.1.1/24")
-func GetInterfaceIpv4CIDR(interfaceName string) (string, error) {
+// GetInterfaceIpv4Info 获取指定网卡的 IPv4 自身地址和子网前缀
+func GetInterfaceIpv4Info(interfaceName string) (addr netip.Addr, prefix netip.Prefix, err error) {
 	link, err := netlink.LinkByName(interfaceName)
 	if err != nil {
-		return "", fmt.Errorf("Network interface %q not found: %v", interfaceName, err)
+		return addr, prefix, fmt.Errorf("interface %q not found: %v", interfaceName, err)
 	}
 
 	addrList, err := netlink.AddrList(link, netlink.FAMILY_V4)
+	if err != nil || len(addrList) == 0 {
+		return addr, prefix, fmt.Errorf("interface %q missing ipv4 address", interfaceName)
+	}
+
+	// netlink 返回的是 net.IP，转为 netip.Addr
+	// addrList[0].IP 是自身 IP，addrList[0].Mask 是掩码
+	ip, _ := netip.ParseAddr(addrList[0].IP.String())
+	ones, _ := addrList[0].Mask.Size()
+
+	return ip, netip.PrefixFrom(ip, ones).Masked(), nil
+}
+
+// GetInterfaceGuaIpv6Info 获取指定网卡的 IPv6 GUA 自身地址和子网前缀 (Prefix)
+func GetInterfaceGuaIpv6Info(interfaceName string) (addr netip.Addr, prefix netip.Prefix, err error) {
+	link, err := netlink.LinkByName(interfaceName)
 	if err != nil {
-		return "", fmt.Errorf("Get Network interface CIDR failed: %v", err)
+		return addr, prefix, fmt.Errorf("interface %q not found: %v", interfaceName, err)
 	}
 
-	if len(addrList) == 0 {
-		return "", fmt.Errorf("Network interface %q missing ipv4 address", interfaceName)
+	addrs, err := netlink.AddrList(link, netlink.FAMILY_V6)
+	if err != nil {
+		return addr, prefix, err
 	}
 
-	// 默认取第一个地址
-	// addrList[0].IPNet 包含 IP 和 Mask
-	return addrList[0].IPNet.String(), nil
+	for _, a := range addrs {
+		ip, _ := netip.ParseAddr(a.IP.String())
+		// 排除链路本地地址 (fe80::)
+		if ip.IsLinkLocalUnicast() {
+			continue
+		}
+		// 寻找 GUA 前缀（掩码小于 128 的通常是运营商下发的 PD 前缀段）
+		ones, _ := a.Mask.Size()
+		if ones < 128 {
+			addr = ip
+			prefix = netip.PrefixFrom(ip, ones).Masked()
+			return addr, prefix, nil
+		}
+	}
+
+	return addr, prefix, fmt.Errorf("no global ipv6 prefix found on %q", interfaceName)
 }
