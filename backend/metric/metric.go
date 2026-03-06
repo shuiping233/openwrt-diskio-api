@@ -6,6 +6,8 @@ package metric
 import (
 	"encoding/binary"
 	"fmt"
+	"log"
+	"net/netip"
 	"strconv"
 	"strings"
 
@@ -754,6 +756,22 @@ func ReadConnectionMetric(reader FsReaderInterface, metric *model.NetworkConnect
 
 		if replyPackets > 0 {
 			packets += replyPackets
+		}
+
+		if originConnection.ipFamily == "ipv6" {
+			sourceIp_, err := netip.ParseAddr(sourceIp)
+			if err != nil {
+				log.Printf("Parsing ip address %q failed: %s", sourceIp, err)
+			} else {
+				sourceIp = sourceIp_.String()
+			}
+
+			destinationIp_, err := netip.ParseAddr(destinationIp)
+			if err != nil {
+				log.Printf("Parsing ip address %q failed: %s", destinationIp, err)
+			} else {
+				destinationIp = destinationIp_.String()
+			}
 		}
 
 		result = append(
