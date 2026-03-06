@@ -584,10 +584,16 @@ const formatTraffic = (bytes: number): string => {
 const copyInfo = (row: any) => {
   let source_ip: string = row.source_ip
   let destination_ip: string = row.destination_ip
-
-  if (row.ip_family?.toUpperCase() === 'IPV6') {
-    source_ip = `[${row.source_ip}]`;
-    destination_ip = `[${row.destination_ip}]`;
+  if (row.ip_family?.toLowerCase() === 'ipv6') {
+    if (getIpDisplay(source_ip) == source_ip) {
+      source_ip = `[${row.source_ip}]`
+    };
+    if (getIpDisplay(destination_ip) == destination_ip) {
+      destination_ip = `[${row.destination_ip}]`
+    };
+  } else {
+    source_ip = getIpDisplay(source_ip);
+    destination_ip = getIpDisplay(destination_ip);
   }
 
   const text = `[${row.ip_family}] ${row.protocol} ${source_ip}:${row.source_port} -> ${destination_ip}:${row.destination_port} | 状态: ${row.state || '-'} | 流量: ${BytesFixed(row.traffic.value, row.traffic.unit)} ${row.traffic.unit} (${row.packets} Pkgs)`;
@@ -1170,7 +1176,7 @@ const getConnectionSortIcon = (columnId: string): string => {
           <div class="flex items-center gap-2 text-sm">
             <span class="text-slate-400">流量统计起始时间:</span>
             <span class="text-slate-300 font-mono">{{ formatCaptureStartTime(aggregationData?.capture_start_at)
-            }}</span>
+              }}</span>
           </div>
           <!-- 全局搜索框（居右） -->
           <div class="relative">
