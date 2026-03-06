@@ -43,10 +43,7 @@ const enableAggregationDns = computed({
   get: () => settings.enable_dns_query_aggregation,
   set: async (value) => {
     await setConfig('enable_dns_query_aggregation', value);
-    if (value) {
-      // 启用时立即查询当前显示的 IP
-      queryAggregationDns();
-    }
+    // 查询逻辑由 watch 处理，这里不需要重复调用
   }
 });
 
@@ -55,10 +52,7 @@ const enableConnectionsDns = computed({
   get: () => settings.enable_dns_query_connections,
   set: async (value) => {
     await setConfig('enable_dns_query_connections', value);
-    if (value) {
-      // 启用时立即查询当前显示的 IP
-      queryConnectionsDns();
-    }
+    // 查询逻辑由 watch 处理，这里不需要重复调用
   }
 });
 
@@ -72,37 +66,6 @@ const getIpv6Display = (ip: string): string => {
   let hostname = getIpDisplay(ip);
   let display = hostname == ip ? `[${hostname}]` : hostname;
   return display;
-};
-
-// 获取聚合统计表格中当前显示的 IP 地址
-const getAggregationVisibleIps = (): string[] => {
-  const ips: string[] = [];
-  // 遍历所有分组的 IP
-  for (const group of [aggregationData.value.lan, aggregationData.value.wan, aggregationData.value.unknown]) {
-    for (const ipStats of group.ips) {
-      if (!dnsCache.value.has(ipStats.ip)) {
-        ips.push(ipStats.ip);
-      }
-    }
-  }
-  return ips;
-};
-
-// 查询聚合统计 DNS
-const queryAggregationDns = async () => {
-  if (!enableAggregationDns.value || aggregationQuerying.value) return;
-  const ips = getAggregationVisibleIps();
-  if (ips.length === 0) return;
-
-  aggregationQuerying.value = true;
-  try {
-    const results = await queryDns(ips);
-    for (const [ip, hostname] of results) {
-      dnsCache.value.set(ip, hostname);
-    }
-  } finally {
-    aggregationQuerying.value = false;
-  }
 };
 
 // 获取连接列表表格中当前显示的 IP 地址（仅当前页）
@@ -143,51 +106,6 @@ const queryConnectionsDns = async () => {
     connectionsQuerying.value = false;
   }
 };
-
-// DNS 轮询定时器
-let dnsPollInterval: number | null = null;
-
-// 启动 DNS 轮询
-const startDnsPolling = () => {
-  if (dnsPollInterval) return;
-  const intervalMs = settings.dns_poll_interval * 1000;
-  dnsPollInterval = window.setInterval(() => {
-    if (enableAggregationDns.value) {
-      queryAggregationDns();
-    }
-    if (enableConnectionsDns.value) {
-      queryConnectionsDns();
-    }
-  }, intervalMs);
-};
-
-// 停止 DNS 轮询
-const stopDnsPolling = () => {
-  if (dnsPollInterval) {
-    clearInterval(dnsPollInterval);
-    dnsPollInterval = null;
-  }
-};
-
-// 监听 DNS 启用状态，启动/停止轮询
-watch([enableAggregationDns, enableConnectionsDns], ([aggEnabled, connEnabled]) => {
-  if (aggEnabled || connEnabled) {
-    startDnsPolling();
-    // 立即执行一次查询
-    if (aggEnabled) queryAggregationDns();
-    if (connEnabled) queryConnectionsDns();
-  } else {
-    stopDnsPolling();
-  }
-}, { immediate: true });
-
-// 监听轮询间隔变化，重启轮询
-watch(() => settings.dns_poll_interval, () => {
-  if (enableAggregationDns.value || enableConnectionsDns.value) {
-    stopDnsPolling();
-    startDnsPolling();
-  }
-});
 
 // 组件卸载时清理定时器
 onUnmounted(() => {
@@ -589,6 +507,86 @@ const aggregationData = computed((): { capture_start_at: string, lan: GroupStats
     wan: calculateGroupTotal(wanIPs, 'wan', '外网IP'),
     unknown: calculateGroupTotal(unknownIPs, 'unknown', '未知IP'),
   };
+});
+
+// 获取聚合统计表格中当前显示的 IP 地址
+const getAggregationVisibleIps = (): string[] => {
+  const ips: string[] = [];
+  // 安全检查：确保 aggregationData 已初始化
+  if (!aggregationData.value) return ips;
+
+  // 遍历所有分组的 IP
+  for (const group of [aggregationData.value.lan, aggregationData.value.wan, aggregationData.value.unknown]) {
+    if (!group || !group.ips) continue;
+    for (const ipStats of group.ips) {
+      if (!dnsCache.value.has(ipStats.ip)) {
+        ips.push(ipStats.ip);
+      }
+    }
+  }
+  return ips;
+};
+
+// 查询聚合统计 DNS
+const queryAggregationDns = async () => {
+  if (!enableAggregationDns.value || aggregationQuerying.value) return;
+  const ips = getAggregationVisibleIps();
+  if (ips.length === 0) return;
+
+  aggregationQuerying.value = true;
+  try {
+    const results = await queryDns(ips);
+    for (const [ip, hostname] of results) {
+      dnsCache.value.set(ip, hostname);
+    }
+  } finally {
+    aggregationQuerying.value = false;
+  }
+};
+
+// DNS 轮询定时器
+let dnsPollInterval: number | null = null;
+
+// 启动 DNS 轮询
+const startDnsPolling = () => {
+  if (dnsPollInterval) return;
+  const intervalMs = settings.dns_poll_interval * 1000;
+  dnsPollInterval = window.setInterval(() => {
+    if (enableAggregationDns.value) {
+      queryAggregationDns();
+    }
+    if (enableConnectionsDns.value) {
+      queryConnectionsDns();
+    }
+  }, intervalMs);
+};
+
+// 停止 DNS 轮询
+const stopDnsPolling = () => {
+  if (dnsPollInterval) {
+    clearInterval(dnsPollInterval);
+    dnsPollInterval = null;
+  }
+};
+
+// 监听 DNS 启用状态，启动/停止轮询
+watch([enableAggregationDns, enableConnectionsDns], ([aggEnabled, connEnabled]) => {
+  if (aggEnabled || connEnabled) {
+    startDnsPolling();
+    // 立即执行一次查询
+    if (aggEnabled) queryAggregationDns();
+    if (connEnabled) queryConnectionsDns();
+  } else {
+    stopDnsPolling();
+  }
+}, { immediate: true });
+
+// 监听轮询间隔变化，重启轮询
+watch(() => settings.dns_poll_interval, () => {
+  if (enableAggregationDns.value || enableConnectionsDns.value) {
+    stopDnsPolling();
+    startDnsPolling();
+  }
 });
 
 // ================= 7. 辅助函数 =================
@@ -1214,7 +1212,7 @@ const getConnectionSortIcon = (columnId: string): string => {
           <div class="flex items-center gap-2 text-sm">
             <span class="text-slate-400">流量统计起始时间:</span>
             <span class="text-slate-300 font-mono">{{ formatCaptureStartTime(aggregationData?.capture_start_at)
-            }}</span>
+              }}</span>
           </div>
           <!-- 全局搜索框（居右） -->
           <div class="relative">
