@@ -168,7 +168,7 @@ func (svc *EbpfNetTrafficService) Run(ctx context.Context) {
 	}
 	defer close(done)
 	go svc.WatchNetworkChanges(ctx, updateChan)
-	
+
 	objs := svc.objs
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
@@ -292,7 +292,7 @@ func (svc *EbpfNetTrafficService) trafficAggregate(key bpf.BpfFlowKey, delta uin
 	srcAddr := svc.parseToAddr(key.SrcAddr, key.Family)
 	dstAddr := svc.parseToAddr(key.DstAddr, key.Family)
 
-	// TODO 暂时不过滤openwrt自身ipv6地址,看看什么效果先
+	// 不过滤openwrt自身ipv6地址,因为不考虑nat66
 	if srcAddr != svc.interfaceIpv4 && svc.IsInLocalSubnet(srcAddr) {
 		metric := getOrCreateMetrics(srcAddr, res)
 		metric.UploadRate += rateByte
