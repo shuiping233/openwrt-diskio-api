@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"sort"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -409,48 +407,4 @@ func clearFlowMap(m *ebpf.Map) {
 	for _, k := range keys {
 		_ = m.Delete(k)
 	}
-}
-
-// TODO 可以删了
-func drawUI(metrics map[uint32]*IPMetrics) {
-	var keys []uint32
-	for k := range metrics {
-		keys = append(keys, k)
-	}
-
-	// 排序：按累计总流量降序
-	sort.Slice(keys, func(i, j int) bool {
-		mi, mj := metrics[keys[i]], metrics[keys[j]]
-		return (mi.TotalUpload + mi.TotalDownload) > (mj.TotalUpload + mj.TotalDownload)
-	})
-
-	fmt.Printf("\033[H\033[2J") // 清屏
-	fmt.Printf("【 局域网流量统计 (eBPF) 】- %s\n", time.Now().Format("15:04:05"))
-	fmt.Printf("%-18s | %-12s | %-12s | %-12s\n", "内网 IP 地址", "上传(KB/s)", "下载(KB/s)", "累计总流量")
-	log.Println(strings.Repeat("-", 65))
-
-	if len(keys) == 0 {
-		log.Println("  等待流量...")
-		return
-	}
-
-	for _, key := range keys {
-		m := metrics[key]
-		totalMB := float64(m.TotalUpload+m.TotalDownload) / 1024 / 1024
-
-		// 过滤掉没跑过流量且没累计数据的 IP (保持界面干净)
-		if m.UploadRate == 0 && m.DownloadRate == 0 && totalMB < 0.01 {
-			continue
-		}
-
-		fmt.Printf("%-18s | %10.2f | %10.2f | %10.2f MB\n",
-			m.IP, m.UploadRate, m.DownloadRate, totalMB)
-	}
-}
-
-// TODO 可以删掉了,判断不准确
-func isPrivateIP(ip uint32) bool {
-	b1 := byte(ip & 0xFF)
-	b2 := byte((ip >> 8) & 0xFF)
-	return b1 == 10 || (b1 == 172 && b2 >= 16 && b2 <= 31) || (b1 == 192 && b2 == 168)
 }
