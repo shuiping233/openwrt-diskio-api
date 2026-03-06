@@ -1,0 +1,40 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "vite-dev",
+      "type": "shell",
+      "command": "pnpm",
+      "args": ["vite", "--clearScreen=false"],
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "vite",
+        "pattern": {
+          "regexp": "^.*$"
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".*",
+          "endsPattern": "Local:.+(https?://.+)"
+        }
+      }
+    },
+    {
+      "label": "terminate-vite",
+      "type": "shell",
+      //   "command": "npx",
+      //   "args": ["kill-port", "5173"],
+      //   "command": "pnpm",
+      //   "args": ["dlx", "kill-port", "5173"],
+      "command": "pkill",
+      "args": [
+        "-f",
+        "vite" // 只要命令中包含 vite 的进程全部杀掉
+      ],
+      "presentation": {
+        "reveal": "silent",
+        "panel": "shared"
+      }
+    }
+  ]
+}

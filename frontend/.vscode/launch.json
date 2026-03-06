@@ -1,0 +1,15 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Launch Edge + Vite",
+      "type": "msedge",
+      "request": "launch",
+      "url": "http://localhost:5173", // Vite 默认端口
+      "webRoot": "${workspaceFolder}",
+      "preLaunchTask": "vite-dev", // 先跑上面的 task
+      "postDebugTask": "terminate-vite", // 关键：停止调试时运行
+      "userDataDir": "${workspaceFolder}/.vscode-edge-debug" // 独立用户目录
+    }
+  ]
+}
