@@ -14,9 +14,11 @@ import { useDatabase } from './useDatabase';
 import { covertDataBytes, normalizeToBytes } from './utils/convert';
 import type { HistoryRecord } from "./model";
 import { useSettings, type TabType } from './useSettings';
+import { useBackgroundStop } from './useBackgroundStop';
 
 const { addHistoryBatch } = useDatabase();
 const { settings, setConfig, init: initSettings } = useSettings();
+const { registerCallbacks, isStopped } = useBackgroundStop();
 
 const data = reactive({
   dynamic: {} as DynamicApiResponse,
@@ -265,10 +267,22 @@ const fetchData = async () => {
 
 const startPolling = (showToast = false) => {
   if (timer.value) clearInterval(timer.value);
-  timer.value = window.setInterval(fetchData, uiState.refreshInterval);
+  timer.value = window.setInterval(() => {
+    // 只有在未停止状态下才执行 fetch
+    if (!isStopped.value) {
+      fetchData();
+    }
+  }, uiState.refreshInterval);
   if (showToast) {
     const { success } = useToast();
     success(`刷新间隔已调整为 ${uiState.refreshInterval / 1000} 秒`);
+  }
+};
+
+const stopPolling = () => {
+  if (timer.value) {
+    clearInterval(timer.value);
+    timer.value = null;
   }
 };
 
@@ -289,12 +303,29 @@ const handleTabChange = (tab: TabType) => {
 onMounted(async () => {
   await initSettings();
   uiState.refreshInterval = settings.refresh_interval;
+  
+  // 注册后台停止回调
+  registerCallbacks(
+    () => {
+      // 停止时的回调
+      console.log('[App] Background stop triggered, pausing data fetch');
+      uiState.status = '已暂停(后台)';
+    },
+    () => {
+      // 恢复时的回调
+      console.log('[App] Resuming from background stop');
+      fetchData(); // 立即刷新一次数据
+      startPolling();
+      uiState.status = '运行中';
+    }
+  );
+  
   fetchData();
   startPolling();
 });
 
 onUnmounted(() => {
-  if (timer.value) clearInterval(timer.value);
+  stopPolling();
 });
 </script>
 

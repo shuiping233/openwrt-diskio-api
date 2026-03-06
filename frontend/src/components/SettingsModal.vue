@@ -189,6 +189,50 @@ watch(() => props.isOpen, (newVal) => {
             </div>
           </div>
 
+          <!-- 后台运行设置 -->
+          <div>
+            <h3 class="text-lg font-bold text-orange-400 mb-1 pb-2 border-b border-slate-700">
+              后台运行设置
+            </h3>
+
+            <div class="mt-4 space-y-4">
+              <!-- 配置 : 启用后台停止 -->
+              <div class="flex justify-between items-center">
+                <label class="text-slate-300 text-sm">后台自动停止刷新</label>
+                <button type="button"
+                  @click="handleSave('enable_background_stop', !settings.enable_background_stop)"
+                  class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors"
+                  :class="settings.enable_background_stop ? 'bg-orange-600' : 'bg-slate-600'">
+                  <span class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform"
+                    :class="settings.enable_background_stop ? 'translate-x-6' : 'translate-x-1'" />
+                </button>
+              </div>
+              <p class="text-xs text-slate-500">
+                当浏览器标签页切换到后台或最小化时，自动停止数据刷新以节省路由器资源。
+              </p>
+
+              <!-- 配置 : 后台停止延迟 -->
+              <div class="flex justify-between items-center">
+                <label class="text-sm" :class="settings.enable_background_stop ? 'text-slate-300' : 'text-slate-500'">
+                  后台停止延迟
+                </label>
+                <div class="flex items-center gap-2">
+                  <input type="number" min="10" max="600" :value="settings.background_stop_delay"
+                    @change="(e: Event) => handleSave('background_stop_delay', parseInt((e.target as HTMLInputElement).value, 10))"
+                    :disabled="!settings.enable_background_stop"
+                    class="border rounded px-3 py-1.5 w-20 outline-none transition-colors" :class="settings.enable_background_stop
+                      ? 'bg-slate-900 border-slate-600 text-white focus:border-blue-500'
+                      : 'bg-slate-800 border-slate-700 text-slate-500 cursor-not-allowed'
+                      " />
+                  <span class="text-slate-400 text-sm">秒</span>
+                </div>
+              </div>
+              <p class="text-xs text-slate-500">
+                页面进入后台后等待多久才停止刷新，避免用户短暂切换时频繁启停。
+              </p>
+            </div>
+          </div>
+
         </div>
 
         <!-- 底部: 退出按钮 (右下角) -->

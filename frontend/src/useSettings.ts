@@ -1,7 +1,7 @@
-import { reactive, readonly } from 'vue';
-import { db } from './utils/db';
+import { reactive, readonly } from "vue";
+import { db } from "./utils/db";
 
-export type TabType = 'system' | 'network' | 'monitoringCharts';
+export type TabType = "system" | "network" | "monitoringCharts";
 
 export interface Settings {
   enable_metric_record: boolean;
@@ -15,20 +15,24 @@ export interface Settings {
   dns_cache_ttl: number;
   dns_batch_size: number;
   dns_poll_interval: number;
+  enable_background_stop: boolean;
+  background_stop_delay: number;
 }
 
 export const defaultSettings: Settings = {
   enable_metric_record: false,
   retention_days: 7,
   refresh_interval: 2000,
-  active_tab: 'system',
+  active_tab: "system",
   chart_time_range: 60 * 1000,
   network_table_page_size: 20,
   enable_dns_query_aggregation: false,
   enable_dns_query_connections: false,
   dns_cache_ttl: 5, // minutes
   dns_batch_size: 50,
-  dns_poll_interval: 3 // seconds
+  dns_poll_interval: 3, // seconds
+  enable_background_stop: true,
+  background_stop_delay: 120, // seconds
 };
 
 const settings = reactive<Settings>({ ...defaultSettings });
@@ -42,13 +46,16 @@ const initPromise = (async () => {
       if (record?.value !== undefined) {
         (settings as any)[key] = record.value;
       }
-    })
+    }),
   );
   initialized = true;
 })();
 
 export function useSettings() {
-  const setConfig = async <K extends keyof Settings>(key: K, value: Settings[K]) => {
+  const setConfig = async <K extends keyof Settings>(
+    key: K,
+    value: Settings[K],
+  ) => {
     await db.settings.put({ key, value });
     (settings as any)[key] = value;
   };
@@ -61,6 +68,6 @@ export function useSettings() {
     settings: readonly(settings),
     setConfig,
     init,
-    isInitialized
+    isInitialized,
   };
 }
