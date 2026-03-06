@@ -23,7 +23,10 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-const EbpfBatchLookupSize = 1024
+const (
+	EbpfBatchLookupSize = 1024
+	SmoothingAlphaRate  = 0.6
+)
 
 type IPMetrics struct {
 	IP string
@@ -332,7 +335,7 @@ func (svc *EbpfNetTrafficService) GetAggregationTrafficMetric() *model.Aggregati
 func (svc *EbpfNetTrafficService) applySmoothing() {
 	// 建议 Alpha 设为 0.3 - 0.5 之间
 	// 0.3 极其平滑，但有 1-2 秒延迟；0.5 反应快，但仍有轻微跳动
-	const alpha = 0.4
+	const alpha = SmoothingAlphaRate
 
 	for _, m := range svc.metricsMap {
 		// 对上传速率进行平滑
@@ -620,6 +623,9 @@ func startCapture(objs *bpf.BpfObjects) {
 }
 
 func stopCapture(objs *bpf.BpfObjects) {
+	if objs == nil || objs.ConfigMap == nil {
+		return
+	}
 	log.Println("Disable ebpf network traffic capture")
 	key := uint32(0)
 	val := uint32(0)
