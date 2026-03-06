@@ -276,22 +276,29 @@ const formatCaptureStartTime = (isoString: string | undefined): string => {
 
 // 根据总实时速率单位获取背景色类（夜晚友好）
 const getThroughputBgClass = (unit: string): string => {
-  switch (unit.toUpperCase()) {
+  const upperUnit = unit.toUpperCase();
+
+  switch (upperUnit) {
     case 'B/S':
-      return ''; // 无背景色
+      return ''; // 初始状态，无背景
     case 'KB/S':
-      return 'bg-slate-700/20'; // 很淡的 slate
+      // 起始：低调的深灰色
+      return 'bg-slate-700/40';
     case 'MB/S':
-      return 'bg-cyan-900/25'; // 淡青色
+      // 淡蓝色：像冰块一样的清透感
+      return 'bg-blue-400/10 text-blue-300 border border-blue-400/20';
+
     case 'GB/S':
-      return 'bg-blue-900/35'; // 中蓝色
+      // 淡黄色：柔和的奶油黄，不刺眼
+      return 'bg-yellow-400/10 text-yellow-200 border border-yellow-400/20';
+
     case 'TB/S':
-      return 'bg-indigo-900/45'; // 深蓝/靛蓝
+      // 淡红色：樱花粉/淡珊瑚色，优雅的警告
+      return 'bg-red-400/15 text-red-300 border border-red-400/25';
     default:
-      return '';
+      return 'bg-red-400/15 text-red-300 border border-red-400/25';
   }
 };
-
 // ================= 2. 全局搜索词 =================
 const globalFilter = ref('');
 const aggregationFilter = ref(''); // 聚合统计的搜索词
@@ -1207,7 +1214,7 @@ const getConnectionSortIcon = (columnId: string): string => {
           <div class="flex items-center gap-2 text-sm">
             <span class="text-slate-400">流量统计起始时间:</span>
             <span class="text-slate-300 font-mono">{{ formatCaptureStartTime(aggregationData?.capture_start_at)
-              }}</span>
+            }}</span>
           </div>
           <!-- 全局搜索框（居右） -->
           <div class="relative">
