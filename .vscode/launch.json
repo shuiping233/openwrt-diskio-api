@@ -23,6 +23,8 @@
                 // "10",
                 "--traffic-capture-interface-name",
                 "eth1",
+                "--wan-interface-name",
+                "eth1",
                 // "--traffic-key-expired-time",
                 // "10s",
                 // "--dns-server-ip",
