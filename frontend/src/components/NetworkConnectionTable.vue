@@ -67,6 +67,12 @@ const getIpDisplay = (ip: string): string => {
   return dnsCache.value.get(ip) || ip;
 };
 
+const getIpv6Display = (ip: string): string => {
+  let hostname = getIpDisplay(ip);
+  let display = hostname == ip ? `[${hostname}]` : hostname;
+  return display;
+};
+
 // 获取聚合统计表格中当前显示的 IP 地址
 const getAggregationVisibleIps = (): string[] => {
   const ips: string[] = [];
@@ -585,12 +591,8 @@ const copyInfo = (row: any) => {
   let source_ip: string = row.source_ip
   let destination_ip: string = row.destination_ip
   if (row.ip_family?.toLowerCase() === 'ipv6') {
-    if (getIpDisplay(source_ip) == source_ip) {
-      source_ip = `[${row.source_ip}]`
-    };
-    if (getIpDisplay(destination_ip) == destination_ip) {
-      destination_ip = `[${row.destination_ip}]`
-    };
+    source_ip = getIpv6Display(row.source_ip);
+    destination_ip = getIpv6Display(row.destination_ip);
   } else {
     source_ip = getIpDisplay(source_ip);
     destination_ip = getIpDisplay(destination_ip);
@@ -686,7 +688,12 @@ const columns = [
       const row = info.row.original;
       const ip = info.getValue();
       const port = row.source_port;
-      const displayIp = dnsCache.value.get(ip) || formatIP(ip, row.ip_family);
+      let displayIp = ip;
+      if (row.ip_family?.toLowerCase() === 'ipv6') {
+        displayIp = getIpv6Display(ip);
+      } else {
+        displayIp = getIpDisplay(ip);
+      }
       const fullText = displayIp + (port > 0 ? ':' + port : '');
       return h('span', {
         class: 'font-mono text-slate-300',
@@ -729,7 +736,12 @@ const columns = [
       const row = info.row.original;
       const ip = info.getValue();
       const port = row.destination_port;
-      const displayIp = dnsCache.value.get(ip) || formatIP(ip, row.ip_family);
+      let displayIp = ip;
+      if (row.ip_family?.toLowerCase() === 'ipv6') {
+        displayIp = getIpv6Display(ip);
+      } else {
+        displayIp = getIpDisplay(ip);
+      }
       const fullText = displayIp + (port > 0 ? ':' + port : '');
       return h('span', {
         class: 'font-mono text-slate-300',
@@ -1308,7 +1320,7 @@ const getConnectionSortIcon = (columnId: string): string => {
                   class="hover:bg-slate-700/30 transition-colors">
                   <td class="px-3 py-2 text-center">
                     <span class="font-mono text-slate-300" :title="ipStats.ip">{{ ipStats.ipFamily == "ipv4" ?
-                      getIpDisplay(ipStats.ip) : formatIP(getIpDisplay(ipStats.ip), ipStats.ipFamily) }}</span>
+                      getIpDisplay(ipStats.ip) : getIpv6Display(ipStats.ip) }}</span>
                   </td>
                   <td class="px-3 py-2 text-center">
                     <span class="font-mono text-slate-200">{{
