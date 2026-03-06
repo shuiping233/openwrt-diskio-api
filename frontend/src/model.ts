@@ -30,7 +30,7 @@ export interface SystemDynamicData {
 export interface DynamicApiResponse {
   storage?: { [key: string]: StorageData };
   cpu?: { [key: string]: CpuData }; // key 是 cpu0, cpu1...
-  network?: { total: NetworkDynamicData;[key: string]: NetworkDynamicData };
+  network?: { total: NetworkDynamicData; [key: string]: NetworkDynamicData };
   memory?: {
     total: Metric;
     used: Metric;
@@ -85,7 +85,18 @@ export interface ConnectionApiResponse {
 export interface HistoryRecord {
   id?: number; // Dexie 自增 ID
   timestamp: number; // 时间戳
-  metric: 'cpu_total' | 'cpu_temp' | 'memory_total' | 'memory_used' | 'memory_used_percent' | 'network_in' | 'network_out' | 'storage_total_io' | 'storage_usage' | 'connections' | 'storage_space';
+  metric:
+    | "cpu_total"
+    | "cpu_temp"
+    | "memory_total"
+    | "memory_used"
+    | "memory_used_percent"
+    | "network_in"
+    | "network_out"
+    | "storage_total_io"
+    | "storage_usage"
+    | "connections"
+    | "storage_space";
   value: number; // 数值
   unit: string; // 单位
   label?: string; // 子标签，用于区分多条折线，例如 'cpu0', 'eth0-in', 'tcp' 等
@@ -98,7 +109,8 @@ export interface UserSetting {
 }
 
 // ================= 聚合流量统计结构 =================
-export type IpAddressType = 'lan' | 'wan' | 'unknown';
+export type IpAddressType = "lan" | "wan" | "unknown";
+export type IpFamilyType = "ipv4" | "ipv6";
 
 export interface MetricUnit {
   value: number;
@@ -108,6 +120,7 @@ export interface MetricUnit {
 export interface AggregationTrafficDetails {
   ip: string;
   ip_type: IpAddressType;
+  ip_family: IpFamilyType;
   incoming: MetricUnit;
   outgoing: MetricUnit;
   total_throughput: MetricUnit;
@@ -128,18 +141,18 @@ export interface AggregationTrafficMetric {
 export type AggregationTrafficResponse = AggregationTrafficMetric;
 
 export const TimeRanges = [
-  { label: '1 分钟', value: 60 * 1000 },
-  { label: '10 分钟', value: 10 * 60 * 1000 },
-  { label: '30 分钟', value: 30 * 60 * 1000 },
-  { label: '1 小时', value: 60 * 60 * 1000 },
-  { label: '6 小时', value: 6 * 60 * 60 * 1000 },
-  { label: '12 小时', value: 12 * 60 * 60 * 1000 },
-  { label: '1 天', value: 24 * 60 * 60 * 1000 },
-  { label: '3 天', value: 3 * 24 * 60 * 60 * 1000 },
-  { label: '7 天', value: 7 * 24 * 60 * 60 * 1000 },
-  { label: '1 月', value: 30 * 24 * 60 * 60 * 1000 },
-  { label: '2 月', value: 60 * 24 * 60 * 60 * 1000 },
-  { label: '3 月', value: 90 * 24 * 60 * 60 * 1000 },
-  { label: '6 月', value: 180 * 24 * 60 * 60 * 1000 },
-  { label: '1 年', value: 365 * 24 * 60 * 60 * 1000 },
+  { label: "1 分钟", value: 60 * 1000 },
+  { label: "10 分钟", value: 10 * 60 * 1000 },
+  { label: "30 分钟", value: 30 * 60 * 1000 },
+  { label: "1 小时", value: 60 * 60 * 1000 },
+  { label: "6 小时", value: 6 * 60 * 60 * 1000 },
+  { label: "12 小时", value: 12 * 60 * 60 * 1000 },
+  { label: "1 天", value: 24 * 60 * 60 * 1000 },
+  { label: "3 天", value: 3 * 24 * 60 * 60 * 1000 },
+  { label: "7 天", value: 7 * 24 * 60 * 60 * 1000 },
+  { label: "1 月", value: 30 * 24 * 60 * 60 * 1000 },
+  { label: "2 月", value: 60 * 24 * 60 * 60 * 1000 },
+  { label: "3 月", value: 90 * 24 * 60 * 60 * 1000 },
+  { label: "6 月", value: 180 * 24 * 60 * 60 * 1000 },
+  { label: "1 年", value: 365 * 24 * 60 * 60 * 1000 },
 ];

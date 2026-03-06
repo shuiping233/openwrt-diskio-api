@@ -1,6 +1,5 @@
-import { ref, computed } from 'vue';
-import { useSettings } from './useSettings';
-import { compressIPv6 } from './utils/ipv6';
+import { ref, computed } from "vue";
+import { useSettings } from "./useSettings";
 
 interface CacheEntry {
   hostname: string;
@@ -50,7 +49,7 @@ class SimpleLRUCache {
 
     this.cache.set(key, {
       hostname: value,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     });
   }
 
@@ -106,7 +105,7 @@ export function useDnsQuery() {
     // 构建查询参数
     const params = new URLSearchParams();
     for (const ip of ipsToQuery) {
-      params.append('ip', ip);
+      params.append("ip", ip);
     }
 
     try {
@@ -127,14 +126,14 @@ export function useDnsQuery() {
         } else {
           // 查不到结果，记录为 IP 自己，避免重复查询
           // IPv6 地址需要压缩以保持与 key 一致
-          const valueToCache = ip.includes(':') ? `[${compressIPv6(ip)}]` : ip;
+          const valueToCache = ip.includes(":") ? `${ip}` : ip;
           cache.set(ip, valueToCache);
           // 不加入 result，保持显示原 IP
         }
       }
     } catch (err) {
-      console.error('DNS query error:', err);
-      error.value = err instanceof Error ? err.message : 'DNS query failed';
+      console.error("DNS query error:", err);
+      error.value = err instanceof Error ? err.message : "DNS query failed";
       // 查询失败不影响已有缓存结果
     }
 
@@ -176,6 +175,6 @@ export function useDnsQuery() {
     queryDns,
     clearCache,
     isQuerying: computed(() => isQuerying.value),
-    error: computed(() => error.value)
+    error: computed(() => error.value),
   };
 }

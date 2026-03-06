@@ -11,8 +11,7 @@ import {
   SortingState,
   ColumnFiltersState
 } from '@tanstack/vue-table';
-import type { ConnectionApiResponse, AggregationTrafficResponse, AggregationTrafficDetails, IpAddressType } from '../model';
-import { compressIPv6 } from '../utils/ipv6';
+import type { ConnectionApiResponse, AggregationTrafficResponse, AggregationTrafficDetails, IpAddressType, IpFamilyType } from '../model';
 import { convertToBytes, BytesFixed, formatIOBytes, normalizeToBytes, formatDataBytes } from '../utils/convert';
 import { useToast } from '../useToast';
 import { useDatabase } from '../useDatabase';
@@ -340,6 +339,7 @@ interface TrafficMetric {
 interface IPStats {
   ip: string;
   ipType: IpAddressType;
+  ipFamily: IpFamilyType;
   totalThroughput: TrafficMetric;  // 总实时速率 - total_throughput
   uploadThroughput: TrafficMetric;   // 上行流量 - incoming
   downloadThroughput: TrafficMetric; // 下行流量 - outgoing
@@ -482,6 +482,7 @@ const aggregationData = computed((): { capture_start_at: string, lan: GroupStats
   const ipStatsList: IPStats[] = allDetails.map((detail) => ({
     ip: detail.ip,
     ipType: detail.ip_type,
+    ipFamily: detail.ip_family,
     totalThroughput: {
       value: detail.total_throughput.value,
       unit: detail.total_throughput.unit,
@@ -561,8 +562,8 @@ const aggregationData = computed((): { capture_start_at: string, lan: GroupStats
 // ================= 7. 辅助函数 =================
 const formatIP = (ip: string | undefined, family: string | undefined): string => {
   if (!ip) return '-';
-  if (family?.toUpperCase() === 'IPV6') {
-    return `[${compressIPv6(ip)}]`;
+  if (family?.toLowerCase() === 'ipv6') {
+    return `[${ip}]`;
   }
   return ip;
 };
@@ -585,8 +586,8 @@ const copyInfo = (row: any) => {
   let destination_ip: string = row.destination_ip
 
   if (row.ip_family?.toUpperCase() === 'IPV6') {
-    source_ip = `[${compressIPv6(row.source_ip)}]`;
-    destination_ip = `[${compressIPv6(row.destination_ip)}]`;
+    source_ip = `[${row.source_ip}]`;
+    destination_ip = `[${row.destination_ip}]`;
   }
 
   const text = `[${row.ip_family}] ${row.protocol} ${source_ip}:${row.source_port} -> ${destination_ip}:${row.destination_port} | 状态: ${row.state || '-'} | 流量: ${BytesFixed(row.traffic.value, row.traffic.unit)} ${row.traffic.unit} (${row.packets} Pkgs)`;
@@ -1169,7 +1170,7 @@ const getConnectionSortIcon = (columnId: string): string => {
           <div class="flex items-center gap-2 text-sm">
             <span class="text-slate-400">流量统计起始时间:</span>
             <span class="text-slate-300 font-mono">{{ formatCaptureStartTime(aggregationData?.capture_start_at)
-              }}</span>
+            }}</span>
           </div>
           <!-- 全局搜索框（居右） -->
           <div class="relative">
@@ -1300,7 +1301,8 @@ const getConnectionSortIcon = (columnId: string): string => {
                 <tr v-for="ipStats in group.ips" :key="ipStats.ip" v-show="!uiState.ipGroupCollapsed[group.key]"
                   class="hover:bg-slate-700/30 transition-colors">
                   <td class="px-3 py-2 text-center">
-                    <span class="font-mono text-slate-300" :title="ipStats.ip">{{ getIpDisplay(ipStats.ip) }}</span>
+                    <span class="font-mono text-slate-300" :title="ipStats.ip">{{ ipStats.ipFamily == "ipv4" ?
+                      getIpDisplay(ipStats.ip) : formatIP(getIpDisplay(ipStats.ip), ipStats.ipFamily) }}</span>
                   </td>
                   <td class="px-3 py-2 text-center">
                     <span class="font-mono text-slate-200">{{
