@@ -44,6 +44,7 @@ type EbpfNetTrafficService struct {
 	mutex               sync.RWMutex
 	lastRequestTimeUnix int64
 	captureStartAt      int64
+	lastFrameTime       time.Time
 }
 
 func NewEbpfNetTrafficService(keyExpiredTime time.Duration) *EbpfNetTrafficService {
@@ -109,55 +110,77 @@ func (svc *EbpfNetTrafficService) frame(
 		return
 	}
 
-	metricsMap := svc.metricsMap
+	// 1. 获取精准的采样时间间隔
+	now := time.Now()
+	if svc.lastFrameTime.IsZero() {
+		svc.lastFrameTime = now.Add(-1 * time.Second)
+	}
+	duration := now.Sub(svc.lastFrameTime).Seconds()
+	svc.lastFrameTime = now
+
 	lastUnix := atomic.LoadInt64(&svc.lastRequestTimeUnix)
 	lastTime := time.Unix(0, lastUnix)
+
 	svc.mutex.Lock()
 	defer svc.mutex.Unlock()
 
-	// 如果超过 n 秒没收到新请求，则关停以节省资源
 	if time.Since(lastTime) > keyExpiredTime {
 		stopCapture(objs)
 		clearFlowMap(objs.FlowMap)
-		clear(metricsMap)
+		clear(svc.metricsMap)
 		clear(lastSnapshots)
 		return
 	}
 
 	nowKtime := getKtimeNS()
-	timeout := uint64(keyExpiredTime) // n秒无流量老化
+	timeout := uint64(keyExpiredTime)
 
-	// 重置每秒速率
-	for _, m := range metricsMap {
+	// 重置当前速率
+	for _, m := range svc.metricsMap {
 		m.UploadRate = 0
 		m.DownloadRate = 0
 	}
 
 	var key bpf.BpfFlowKey
-	var val bpf.BpfFlowStats
+	// 注意：Per-CPU Map 迭代出的是 Stats 切片
+	var vals []bpf.BpfFlowStats
 	iter := objs.FlowMap.Iterate()
 
-	for iter.Next(&key, &val) {
-		// 老化处理
-		if nowKtime-val.LastSeen > timeout {
-			objs.FlowMap.Delete(key)
-			delete(lastSnapshots, key)
+	for iter.Next(&key, &vals) {
+		// 2. 汇总所有 CPU 核心的数据
+		var totalBytes uint64
+		var maxLastSeen uint64
+		for _, cpuVal := range vals {
+			totalBytes += cpuVal.Bytes
+			if cpuVal.LastSeen > maxLastSeen {
+				maxLastSeen = cpuVal.LastSeen
+			}
+		}
+
+		// 3. 老化检查 (使用汇总后的 maxLastSeen)
+		if nowKtime-maxLastSeen > timeout {
+			// 继续保持注释，直到性能彻底稳定
+			// objs.FlowMap.Delete(key)
 			continue
 		}
 
-		currentKey := key
-		currentBytes := val.Bytes
+		// 4. 计算 Delta
+		currentBytes := totalBytes
 		delta := uint64(0)
-		if lastBytes, ok := lastSnapshots[currentKey]; ok {
+		if lastBytes, ok := lastSnapshots[key]; ok {
 			if currentBytes >= lastBytes {
 				delta = currentBytes - lastBytes
+			} else {
+				// 异常处理：如果是 counter 重置（虽然 eBPF uint64 很难重置）
+				delta = currentBytes
 			}
 		} else {
 			delta = currentBytes
 		}
-		lastSnapshots[currentKey] = currentBytes
+		lastSnapshots[key] = currentBytes
 
-		svc.trafficAggregate(key, delta, metricsMap)
+		// 5. 聚合统计 (传入 duration)
+		svc.trafficAggregateWithDuration(key, delta, duration)
 	}
 }
 
@@ -287,24 +310,26 @@ func (svc *EbpfNetTrafficService) GetAggregationTrafficMetric() *model.Aggregati
 	return result
 }
 
-func (svc *EbpfNetTrafficService) trafficAggregate(key bpf.BpfFlowKey, delta uint64, res map[netip.Addr]*IPMetrics) {
-	rateByte := float64(delta)
+func (svc *EbpfNetTrafficService) trafficAggregateWithDuration(key bpf.BpfFlowKey, delta uint64, duration float64) {
+	// 速率 = 增量字节 / 实际耗时
+	rate := float64(delta) / duration
+
 	srcAddr := svc.parseToAddr(key.SrcAddr, key.Family)
 	dstAddr := svc.parseToAddr(key.DstAddr, key.Family)
 
-	// 不过滤openwrt自身ipv6地址,因为不考虑nat66
+	// 统计上传 (Source 是本地)
 	if srcAddr != svc.interfaceIpv4 && svc.IsInLocalSubnet(srcAddr) {
-		metric := getOrCreateMetrics(srcAddr, res)
-		metric.UploadRate += rateByte
+		metric := getOrCreateMetrics(srcAddr, svc.metricsMap)
+		metric.UploadRate += rate
 		metric.TotalUpload += delta
 	}
 
+	// 统计下载 (Destination 是本地)
 	if dstAddr != svc.interfaceIpv4 && svc.IsInLocalSubnet(dstAddr) {
-		metric := getOrCreateMetrics(dstAddr, res)
-		metric.DownloadRate += rateByte
+		metric := getOrCreateMetrics(dstAddr, svc.metricsMap)
+		metric.DownloadRate += rate
 		metric.TotalDownload += delta
 	}
-
 }
 
 func (svc *EbpfNetTrafficService) parseToAddr(addr [4]uint32, family uint8) netip.Addr {
@@ -502,16 +527,11 @@ func clearFlowMap(m *ebpf.Map) {
 
 	var keys []bpf.BpfFlowKey
 	var key bpf.BpfFlowKey
-	// 不能传 nil 进去 ebpf map
-	var val bpf.BpfFlowStats
+	var vals []bpf.BpfFlowStats // 改为切片
 
 	iter := m.Iterate()
-	for iter.Next(&key, &val) {
+	for iter.Next(&key, &vals) {
 		keys = append(keys, key)
-	}
-
-	if err := iter.Err(); err != nil {
-		return
 	}
 
 	for _, k := range keys {
