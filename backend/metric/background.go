@@ -23,7 +23,6 @@ type BackgroundService struct {
 	UpdateDynamicMetricInterval            uint
 	UpdateNetworkConnectionDetailsInterval uint
 	TrafficCaptureInterfaceName            string
-	WanInterfaceName                       string
 	TrafficKeyExpiredTime                  time.Duration
 	updatingStatusMap                      sync.Map
 	UpdateEventChan                        chan string
@@ -37,14 +36,12 @@ func (b *BackgroundService) SetConfig(
 	updateDynamicMetricInterval uint,
 	updateNetworkConnectionDetailsInterval uint,
 	trafficCaptureInterfaceName string,
-	wanInterfaceName string,
 	trafficKeyExpiredTime time.Duration,
 ) {
 	b.UpdateStaticMetricInterval = updateStaticMetricInterval
 	b.UpdateDynamicMetricInterval = updateDynamicMetricInterval
 	b.UpdateNetworkConnectionDetailsInterval = updateNetworkConnectionDetailsInterval
 	b.TrafficCaptureInterfaceName = trafficCaptureInterfaceName
-	b.WanInterfaceName = wanInterfaceName
 	b.TrafficKeyExpiredTime = trafficKeyExpiredTime
 }
 func (b *BackgroundService) SetUpdateStaticMetricInterval(interval uint) {
@@ -113,7 +110,7 @@ func (b *BackgroundService) RunAggregationTrafficService(ctx context.Context) {
 			b.TrafficKeyExpiredTime,
 		)
 	}
-	if err := b.ebpfService.InitEbpfInterfaceDevice(b.TrafficCaptureInterfaceName, b.WanInterfaceName); err != nil {
+	if err := b.ebpfService.InitEbpfInterfaceDevice(b.TrafficCaptureInterfaceName); err != nil {
 		log.Fatalf("init ebpf interface device error : %s", err)
 	}
 	go b.ebpfService.Run(ctx)

@@ -55,20 +55,20 @@ func NewEbpfNetTrafficService(keyExpiredTime time.Duration) *EbpfNetTrafficServi
 	}
 }
 
-func (svc *EbpfNetTrafficService) InitEbpfInterfaceDevice(trafficInterface string, wanInterface string) error {
-	svc.captureInterface = trafficInterface
-	ipv4, ipv4Prefix, err := utils.GetInterfaceIpv4Info(trafficInterface)
+func (svc *EbpfNetTrafficService) InitEbpfInterfaceDevice(targetInterface string) error {
+	svc.captureInterface = targetInterface
+	ipv4, ipv4Prefix, err := utils.GetInterfaceIpv4Info(targetInterface)
 	if err != nil {
 		return err
 	}
-	log.Printf("Get %q interface ipv4: %q \n", trafficInterface, ipv4.String())
-	log.Printf("Get %q interface ipv4Prefix: %q \n", trafficInterface, ipv4Prefix.String())
-	ipv6, ipv6Prefix, err := utils.GetInterfaceGuaIpv6Info(wanInterface)
+	log.Printf("Get %q interface ipv4: %q \n", targetInterface, ipv4.String())
+	log.Printf("Get %q interface ipv4Prefix: %q \n", targetInterface, ipv4Prefix.String())
+	ipv6, ipv6Prefix, err := utils.GetInterfaceGuaIpv6Info(targetInterface)
 	if err != nil {
 		return err
 	}
-	log.Printf("Get %q interface ipv6: %q \n", trafficInterface, ipv6.String())
-	log.Printf("Get %q interface ipv6Prefix: %q \n", trafficInterface, ipv6Prefix.String())
+	log.Printf("Get %q interface ipv6: %q \n", targetInterface, ipv6.String())
+	log.Printf("Get %q interface ipv6Prefix: %q \n", targetInterface, ipv6Prefix.String())
 	svc.interfaceIpv4 = ipv4
 	svc.interfaceIpv4Prefix = ipv4Prefix
 	svc.interfaceIpv6 = ipv6
@@ -83,15 +83,15 @@ func (svc *EbpfNetTrafficService) InitEbpfInterfaceDevice(trafficInterface strin
 		return fmt.Errorf("Load BPF object failed: %w", err)
 	}
 
-	link, err := netlink.LinkByName(trafficInterface)
+	link, err := netlink.LinkByName(targetInterface)
 	if err != nil {
-		return fmt.Errorf("Network interface %q not found: %w", trafficInterface, err)
+		return fmt.Errorf("Network interface %q not found: %w", targetInterface, err)
 	}
 
 	if err := attachTCObjects(link, objs.CountFlow.FD()); err != nil {
-		log.Fatalf("Attach network interface %q failed: %s", trafficInterface, err)
+		log.Fatalf("Attach network interface %q failed: %s", targetInterface, err)
 	}
-	log.Printf("Capture traffic from interface %q now\n", trafficInterface)
+	log.Printf("Capture traffic from interface %q now\n", targetInterface)
 
 	startCapture(&objs)
 	svc.link = link
@@ -168,7 +168,7 @@ func (svc *EbpfNetTrafficService) Run(ctx context.Context) {
 	}
 	defer close(done)
 	go svc.WatchNetworkChanges(ctx, updateChan)
-
+	
 	objs := svc.objs
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()

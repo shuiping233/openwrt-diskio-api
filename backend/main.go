@@ -184,7 +184,6 @@ func main() {
 		networkConnectionInterval   = flag.Uint("network-connection-interval", 10, "network connection details update interval")
 		staticMetricInterval        = flag.Uint("static-metric-interval", 60, "metric update interval")
 		trafficCaptureInterfaceName = flag.String("traffic-capture-interface-name", "br-lan", "traffic capture interface name , only use on realtime traffic capture and should be input LAN interface")
-		wanInterfaceName            = flag.String("wan-interface-name", "pppoe-wan", "wan interface name , get ipv6 prefix from wab interface")
 		trafficKeyExpiredTime       = flag.Duration("traffic-key-expired-time", model.MinServiceRunDuration, "metric update interval")
 		dnsServerIp                 = flag.String("dns-server-ip", "127.0.0.1", "dns server ip , ipv6 support , only support tcp or udp 53 port dns")
 		dnsQueryTimeout             = flag.Duration("dns-query-timeout", 1*time.Second, "dns query timeout")
@@ -204,7 +203,6 @@ func main() {
 	log.Printf("networkConnectionInterval : %v", *networkConnectionInterval)
 	log.Printf("staticMetricInterval : %v", *staticMetricInterval)
 	log.Printf("trafficCaptureInterfaceName : %v", *trafficCaptureInterfaceName)
-	log.Printf("wanInterfaceName : %v", *wanInterfaceName)
 	log.Printf("trafficKeyExpiredTime : %v", *trafficKeyExpiredTime)
 	log.Printf("dnsServerIp : %v", *dnsServerIp)
 	log.Printf("dnsQueryTimeout : %v", *dnsQueryTimeout)
@@ -214,7 +212,6 @@ func main() {
 		*dynamicMetricInterval,
 		*networkConnectionInterval,
 		*trafficCaptureInterfaceName,
-		*wanInterfaceName,
 		*trafficKeyExpiredTime,
 	)
 	dnsQueryService = dns.NewDnsQueryService(
