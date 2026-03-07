@@ -274,8 +274,15 @@ func (svc *EbpfNetTrafficService) ActiveSignal() {
 
 func (svc *EbpfNetTrafficService) Close() {
 	log.Println("Cleaning ebpf resources...")
-	stopCapture(svc.objs)
-	cleanUpTC(svc.link)
+	if svc.objs == nil {
+		return
+	}
+	if isCapturing(svc.objs) {
+		stopCapture(svc.objs)
+	}
+	if svc.link != nil {
+		cleanUpTC(svc.link)
+	}
 	svc.objs.Close()
 }
 
