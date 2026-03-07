@@ -1200,24 +1200,28 @@ const getConnectionSortIcon = (columnId: string): string => {
       <div v-show="uiState.accordions.aggregation"
         class="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden">
         <!-- DNS 查询开关 + 流量统计起始时间 + 搜索框 -->
-        <div class="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
-          <!-- DNS 查询开关（居左） -->
-          <label class="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" v-model="enableAggregationDns"
-              class="w-4 h-4 rounded border-slate-600 text-blue-500 focus:ring-blue-500 bg-slate-700" />
-            <span class="text-sm text-slate-300">启用 DNS 查询</span>
-            <span v-if="aggregationQuerying" class="text-xs text-blue-400 animate-pulse">查询中...</span>
-          </label>
-          <!-- 流量统计起始时间（中间） -->
-          <div class="flex items-center gap-2 text-sm">
-            <span class="text-slate-400">流量统计起始时间:</span>
-            <span class="text-slate-300 font-mono">{{ formatCaptureStartTime(aggregationData?.capture_start_at)
-              }}</span>
+        <div
+          class="px-4 py-3 border-b border-slate-700 flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+          <!-- 左侧区域：DNS 开关 + 统计时间 -->
+          <div class="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4 w-full md:w-auto">
+            <!-- DNS 查询开关 -->
+            <label class="flex items-center gap-2 cursor-pointer flex-shrink-0">
+              <input type="checkbox" v-model="enableAggregationDns"
+                class="w-4 h-4 rounded border-slate-600 text-blue-500 focus:ring-blue-500 bg-slate-700" />
+              <span class="text-sm text-slate-300">启用 DNS 查询</span>
+              <span v-if="aggregationQuerying" class="text-xs text-blue-400 animate-pulse">查询中...</span>
+            </label>
+            <!-- 流量统计起始时间 -->
+            <div class="flex items-center gap-2 text-xs sm:text-sm flex-shrink-0">
+              <span class="text-slate-400">流量统计起始时间:</span>
+              <span class="text-slate-300 font-mono">{{ formatCaptureStartTime(aggregationData?.capture_start_at)
+                }}</span>
+            </div>
           </div>
-          <!-- 全局搜索框（居右） -->
-          <div class="relative">
+          <!-- 全局搜索框（右侧） -->
+          <div class="relative w-full md:w-auto">
             <input v-model="aggregationFilter" placeholder="搜索 IP、流量、连接数..."
-              class="bg-slate-900 border border-slate-600 text-white text-xs px-3 py-1.5 pr-8 rounded w-56 outline-none focus:border-blue-400" />
+              class="bg-slate-900 border border-slate-600 text-white text-xs px-3 py-1.5 pr-8 rounded w-full md:w-56 outline-none focus:border-blue-400" />
             <button v-if="aggregationFilter" @click="aggregationFilter = ''"
               class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 text-xs w-4 h-4 flex items-center justify-center rounded hover:bg-slate-700 transition-colors"
               title="清空搜索">
@@ -1419,18 +1423,19 @@ const getConnectionSortIcon = (columnId: string): string => {
       <div v-show="uiState.accordions.connectionList"
         class="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden">
         <!-- DNS 查询开关 + 搜索框 -->
-        <div class="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
-          <!-- DNS 查询开关（居左） -->
-          <label class="flex items-center gap-2 cursor-pointer">
+        <div
+          class="px-4 py-3 border-b border-slate-700 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <!-- DNS 查询开关 -->
+          <label class="flex items-center gap-2 cursor-pointer flex-shrink-0">
             <input type="checkbox" v-model="enableConnectionsDns"
               class="w-4 h-4 rounded border-slate-600 text-blue-500 focus:ring-blue-500 bg-slate-700" />
             <span class="text-sm text-slate-300">启用 DNS 查询</span>
             <span v-if="connectionsQuerying" class="text-xs text-blue-400 animate-pulse">查询中...</span>
           </label>
-          <!-- 全局搜索框（居右） -->
-          <div class="relative">
+          <!-- 全局搜索框 -->
+          <div class="relative w-full sm:w-auto">
             <input v-model="globalFilter" placeholder="全局搜索..."
-              class="bg-slate-900 border border-slate-600 text-white text-xs px-3 py-1.5 pr-8 rounded w-56 outline-none focus:border-blue-400" />
+              class="bg-slate-900 border border-slate-600 text-white text-xs px-3 py-1.5 pr-8 rounded w-full sm:w-56 outline-none focus:border-blue-400" />
             <button v-if="globalFilter" @click="globalFilter = ''"
               class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 text-xs w-4 h-4 flex items-center justify-center rounded hover:bg-slate-700 transition-colors"
               title="清空搜索">
