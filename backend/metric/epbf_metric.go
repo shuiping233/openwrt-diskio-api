@@ -66,18 +66,27 @@ type EbpfNetTrafficService struct {
 	lastRequestTimeUnix int64
 	captureStartAt      int64
 	lastFrameTime       time.Time
+	possibleCpuNumber   int
 }
 
 func NewEbpfNetTrafficService(keyExpiredTime time.Duration) *EbpfNetTrafficService {
 	return &EbpfNetTrafficService{
-		keyExpiredTime: keyExpiredTime,
-		activeChan:     make(chan struct{}, 1),
-		metricsMap:     make(map[netip.Addr]*IPMetrics),
-		captureStartAt: time.Now().UnixNano(),
+		keyExpiredTime:    keyExpiredTime,
+		activeChan:        make(chan struct{}, 1),
+		metricsMap:        make(map[netip.Addr]*IPMetrics),
+		captureStartAt:    time.Now().UnixNano(),
+		possibleCpuNumber: runtime.NumCPU(),
 	}
 }
 
 func (svc *EbpfNetTrafficService) InitEbpfInterfaceDevice(targetInterface string) error {
+	possibleCpuNumber, err := ebpf.PossibleCPU()
+	if err != nil {
+		return fmt.Errorf("Get possible cpu number failed: %w", err)
+	}
+	svc.possibleCpuNumber = possibleCpuNumber
+	log.Printf("Possible cpu number: %d \n", possibleCpuNumber)
+
 	svc.captureInterface = targetInterface
 	ipv4, ipv4Prefix, err := utils.GetInterfaceIpv4Info(targetInterface)
 	if err != nil {
@@ -144,11 +153,11 @@ func (svc *EbpfNetTrafficService) frame(
 		return
 	}
 
-	numCPU, _ := ebpf.PossibleCPU()
+	numCpu := svc.possibleCpuNumber
 	var (
 		batchSize = EbpfBatchLookupSize
 		keys      = make([]bpf.BpfFlowKey, batchSize)
-		vals      = make([]bpf.BpfFlowStats, batchSize*numCPU)
+		vals      = make([]bpf.BpfFlowStats, batchSize*numCpu)
 		cursor    ebpf.MapBatchCursor
 	)
 
@@ -163,12 +172,12 @@ func (svc *EbpfNetTrafficService) frame(
 	for {
 		count, err := objs.FlowMap.BatchLookup(&cursor, keys, vals, nil)
 
-		for i := 0; i < count; i++ {
-			key := keys[i]
+		for index := range count {
+			key := keys[index]
 			var totalBytes uint64
 			// 聚合所有 CPU 的字节数
-			for cpu := 0; cpu < numCPU; cpu++ {
-				totalBytes += vals[i*numCPU+cpu].Bytes
+			for cpu := range numCpu {
+				totalBytes += vals[index*numCpu+cpu].Bytes
 			}
 
 			// 计算增量 (Delta)
@@ -244,7 +253,7 @@ func (svc *EbpfNetTrafficService) Run(ctx context.Context) {
 
 func (svc *EbpfNetTrafficService) shutdownCapture(objs *bpf.BpfObjects, lastSnapshots map[bpf.BpfFlowKey]uint64) {
 	stopCapture(objs)
-	clearFlowMap(objs.FlowMap)
+	clearFlowMap(objs.FlowMap, svc.possibleCpuNumber)
 	svc.mutex.Lock()
 	clear(svc.metricsMap)
 	svc.mutex.Unlock()
@@ -643,29 +652,28 @@ func isCapturing(objs *bpf.BpfObjects) bool {
 	return val == 1
 }
 
-func clearFlowMap(m *ebpf.Map) {
-	if m == nil {
-		return
-	}
-	var key bpf.BpfFlowKey
-	var keys []bpf.BpfFlowKey
-
-	// 先收集所有 Key
-	iter := m.Iterate()
-	for iter.Next(&key, nil) {
-		keys = append(keys, key)
-	}
-
-	if len(keys) == 0 {
+func clearFlowMap(ebpfMap *ebpf.Map, numCpu int) {
+	if ebpfMap == nil {
 		return
 	}
 
-	// 批量删除
-	_, err := m.BatchDelete(keys, nil)
-	if err != nil {
-		// 如果内核不支持 BatchDelete，降级回普通循环删除
-		for _, k := range keys {
-			_ = m.Delete(k)
+	var (
+		keys = make([]bpf.BpfFlowKey, EbpfBatchLookupSize)
+		// 依然需要提供合法的内存空间给 Value
+		vals   = make([]bpf.BpfFlowStats, EbpfBatchLookupSize*numCpu)
+		cursor ebpf.MapBatchCursor
+	)
+
+	for {
+		// BatchLookup 虽然也需要 vals，但它在处理循环时比 Iterator 更健壮
+		count, err := ebpfMap.BatchLookup(&cursor, keys, vals, nil)
+
+		if count > 0 {
+			_, _ = ebpfMap.BatchDelete(keys[:count], nil)
+		}
+
+		if err != nil { // 包括 io.EOF
+			break
 		}
 	}
 }
