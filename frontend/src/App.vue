@@ -4,6 +4,7 @@ import dayjs from 'dayjs';
 import type {
   DynamicApiResponse, StaticApiResponse, ConnectionApiResponse, AggregationTrafficResponse
 } from './model';
+import { APP_CONFIG } from "./config/app";
 import SettingsModal from './components/SettingsModal.vue';
 import NetworkConnectionTable from './components/NetworkConnectionTable.vue';
 import SystemOverview from './components/SystemOverview.vue';
@@ -303,7 +304,7 @@ const handleTabChange = (tab: TabType) => {
 onMounted(async () => {
   await initSettings();
   uiState.refreshInterval = settings.refresh_interval;
-  
+
   // 注册后台停止回调
   registerCallbacks(
     () => {
@@ -319,7 +320,7 @@ onMounted(async () => {
       uiState.status = '运行中';
     }
   );
-  
+
   fetchData();
   startPolling();
 });
@@ -340,7 +341,7 @@ onUnmounted(() => {
           stroke-linecap="round" stroke-linejoin="round">
           <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
         </svg>
-        <span class="text-xl font-bold">系统 I/O 监控仪表盘</span>
+        <span class="text-xl font-bold">{{ APP_CONFIG.title }}</span>
       </div>
 
       <div class="flex items-center gap-2 text-sm text-slate-400">
