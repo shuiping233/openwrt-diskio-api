@@ -381,7 +381,12 @@ const filterIPStats = (ips: IPStats[], filter: string): IPStats[] => {
     if (ip.ip.toLowerCase().includes(lowerFilter)) return true;
 
     // 检查 hostname（如果启用了 DNS）
-    const hostname = dnsCache.value.get(ip.ip);
+    let hostname = ip.ip;
+    if (ip.ipFamily.toLowerCase() === 'ipv6') {
+      hostname = getIpv6Display(ip.ip, true);
+    } else {
+      hostname = getIpDisplay(ip.ip);
+    }
     if (hostname && hostname.toLowerCase().includes(lowerFilter)) return true;
 
     // 检查格式化后的流量值（数值+单位）
