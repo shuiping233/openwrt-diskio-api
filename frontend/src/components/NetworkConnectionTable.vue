@@ -1493,11 +1493,12 @@ const getConnectionSortIcon = (columnId: string): string => {
           </table>
         </div>
 
-        <!-- 分页控件 -->
-        <!-- 手机端（<= 500px）：完全竖向分组排列 -->
+        <!-- 分页相关控件 -->
         <div class="border-t border-slate-700 bg-slate-800/50">
 
+          <!-- 手机端（<= 450px）-->
           <div class="px-4 py-4 flex flex-col gap-6 [@media(min-width:451px)]:hidden">
+            <!-- 分页大小控件：完全竖向分组排列 -->
             <div class="flex flex-col gap-3">
               <span class="text-xs text-slate-400">每页显示：</span>
               <div class="flex flex-col gap-2">
@@ -1531,6 +1532,7 @@ const getConnectionSortIcon = (columnId: string): string => {
               </div>
             </div>
 
+            <!-- 页码控件：完全竖向分组排列 -->
             <div class="flex flex-col gap-3">
               <div class="flex justify-between items-center">
                 <span class="text-xs text-slate-400">第 {{ table.getState().pagination.pageIndex + 1 }} 页</span>
@@ -1555,22 +1557,24 @@ const getConnectionSortIcon = (columnId: string): string => {
                   <span class="text-xs text-slate-400">页</span>
                 </div>
                 <div class="flex gap-2">
-                  <button @click="table.nextPage()" :disabled="!table.getCanNextPage()"
-                    class="flex-1 text-xs py-2 rounded bg-slate-700 text-slate-300 disabled:opacity-40 border border-slate-600">
-                    下一页
-                  </button>
                   <button @click="table.setPageIndex(table.getPageCount() - 1)" :disabled="!table.getCanNextPage()"
                     class="flex-1 text-xs py-2 rounded bg-slate-700 text-slate-300 disabled:opacity-40 border border-slate-600">
                     末页
+                  </button>
+                  <button @click="table.nextPage()" :disabled="!table.getCanNextPage()"
+                    class="flex-1 text-xs py-2 rounded bg-slate-700 text-slate-300 disabled:opacity-40 border border-slate-600">
+                    下一页
                   </button>
                 </div>
               </div>
             </div>
           </div>
 
+          <!-- 平板端（450px - 900px）-->
           <div
-            class="px-4 py-4 hidden [@media(min-width:451px)]:flex [@media(min-width:951px)]:hidden items-start justify-between gap-8">
-            <div class="flex flex-col gap-3 flex-1 max-w-[240px]">
+            class="px-4 py-4 hidden [@media(min-width:451px)]:flex [@media(min-width:901px)]:hidden items-start justify-between gap-8">
+            <!-- 分页大小控件：两个一组竖向分组排列 -->
+            <div class="flex flex-col gap-3 flex-1 max-w-60">
               <span class="text-xs text-slate-400 font-medium text-left">每页显示：</span>
               <div class="flex flex-col gap-2">
                 <div class="flex gap-2">
@@ -1599,8 +1603,8 @@ const getConnectionSortIcon = (columnId: string): string => {
                 </div>
               </div>
             </div>
-
-            <div class="flex flex-col gap-3 flex-1 max-w-[240px]">
+            <!-- 页码控件：两个一组竖向分组排列 -->
+            <div class="flex flex-col gap-3 flex-1 max-w-60">
               <span class="text-xs text-slate-400 font-medium text-right">页码导航：</span>
               <div class="flex flex-col gap-2">
                 <div class="flex gap-2">
@@ -1615,16 +1619,18 @@ const getConnectionSortIcon = (columnId: string): string => {
                   <span class="text-[10px] text-slate-500 whitespace-nowrap">/ {{ table.getPageCount() }}</span>
                 </div>
                 <div class="flex gap-2">
-                  <button @click="table.nextPage()" :disabled="!table.getCanNextPage()"
-                    class="flex-1 text-xs py-1.5 rounded bg-slate-700 text-slate-300 border border-slate-600 disabled:opacity-40">下页</button>
                   <button @click="table.setPageIndex(table.getPageCount() - 1)" :disabled="!table.getCanNextPage()"
                     class="flex-1 text-xs py-1.5 rounded bg-slate-700 text-slate-300 border border-slate-600 disabled:opacity-40">末页</button>
+                  <button @click="table.nextPage()" :disabled="!table.getCanNextPage()"
+                    class="flex-1 text-xs py-1.5 rounded bg-slate-700 text-slate-300 border border-slate-600 disabled:opacity-40">下页</button>
                 </div>
               </div>
             </div>
           </div>
 
-          <div class="px-4 py-3 hidden [@media(min-width:951px)]:flex flex-wrap items-center justify-between gap-3">
+          <!-- pc端（>= 900px）-->
+          <div class="px-4 py-3 hidden [@media(min-width:901px)]:flex flex-wrap items-center justify-between gap-3">
+            <!-- 分页大小控件：展开成一行横向排列 -->
             <div class="flex items-center gap-2">
               <span class="text-xs text-slate-400">每页显示：</span>
               <button v-for="size in pageSizeOptions" :key="size" @click="switchToPresetSize(size)"
@@ -1641,7 +1647,7 @@ const getConnectionSortIcon = (columnId: string): string => {
                 <span class="text-xs text-slate-400">条</span>
               </div>
             </div>
-
+            <!-- 页码控件：展开成一行横向排列 -->
             <div class="flex items-center gap-4">
               <span class="text-xs text-slate-500 whitespace-nowrap">
                 共 {{ table.getFilteredRowModel().rows.length }} 条记录
