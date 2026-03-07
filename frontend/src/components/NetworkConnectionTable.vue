@@ -62,10 +62,14 @@ const getIpDisplay = (ip: string): string => {
   return getCachedHostname(ip) || dnsCache.value.get(ip) || ip;
 };
 
-const getIpv6Display = (ip: string): string => {
-  let hostname = getIpDisplay(ip);
-  let display = hostname == ip ? `[${hostname}]` : hostname;
-  return display;
+const getIpv6Display = (ip: string, ipv6Prefix: boolean = false): string => {
+  const hostname = getIpDisplay(ip);
+  // 如果 hostname 和 ip 一样，说明没找到别名，显示为 [IPv6]
+  if (hostname === ip) {
+    return `[${ip}]`;
+  }
+  // 如果找到了别名，显示别名，根据需要决定是否加前缀
+  return ipv6Prefix ? `(IPV6)${hostname}` : hostname;
 };
 
 // 获取连接列表表格中当前显示的 IP 地址（仅当前页）
@@ -1213,7 +1217,7 @@ const getConnectionSortIcon = (columnId: string): string => {
           <div class="flex items-center gap-2 text-xs sm:text-sm flex-shrink-0 md:flex-1 md:justify-center">
             <span class="text-slate-400">流量统计起始时间:</span>
             <span class="text-slate-300 font-mono">{{ formatCaptureStartTime(aggregationData?.capture_start_at)
-              }}</span>
+            }}</span>
           </div>
           <!-- 全局搜索框（右侧） -->
           <div class="relative w-full md:w-auto">
@@ -1345,7 +1349,7 @@ const getConnectionSortIcon = (columnId: string): string => {
                   :class="['hover:bg-slate-700/30 transition-colors', getThroughputBgClass(ipStats.totalThroughput.unit)]">
                   <td class="px-3 py-2 text-center">
                     <span class="font-mono text-slate-300" :title="ipStats.ip">{{ ipStats.ipFamily == "ipv4" ?
-                      getIpDisplay(ipStats.ip) : getIpv6Display(ipStats.ip) }}</span>
+                      getIpDisplay(ipStats.ip) : getIpv6Display(ipStats.ip, true) }}</span>
                   </td>
                   <td class="px-3 py-2 text-center">
                     <span class="font-mono text-slate-200">{{
@@ -1420,7 +1424,8 @@ const getConnectionSortIcon = (columnId: string): string => {
       <div v-show="uiState.accordions.connectionList"
         class="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden">
         <!-- DNS 查询开关 + 搜索框 -->
-        <div class="px-4 py-3 border-b border-slate-700 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <div
+          class="px-4 py-3 border-b border-slate-700 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <!-- DNS 查询开关 -->
           <label class="flex items-center gap-2 cursor-pointer flex-shrink-0">
             <input type="checkbox" v-model="enableConnectionsDns"
