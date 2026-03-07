@@ -54,6 +54,7 @@ func (ns *NeighborService) Run(ctx context.Context) {
 		case <-ns.activeChan:
 			if !isRunning {
 				isRunning = true
+				log.Println("Enable ipv6 neighbor query service")
 				if err := ns.Reload(); err != nil {
 					log.Println(err)
 				}
@@ -66,6 +67,7 @@ func (ns *NeighborService) Run(ctx context.Context) {
 			lastActiveUnix := atomic.LoadInt64(&ns.lastActive)
 			if time.Since(time.Unix(0, lastActiveUnix)) > model.MinServiceRunDuration {
 				isRunning = false
+				log.Println("Disable ipv6 neighbor query service")
 				continue
 			}
 
