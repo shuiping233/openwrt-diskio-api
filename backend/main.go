@@ -176,6 +176,7 @@ func PrettyExit(httpServer *http.Server) {
 }
 
 func main() {
+	log.SetOutput(os.Stdout)
 
 	var (
 		host                        = flag.String("host", "127.0.0.1", "listen host")
