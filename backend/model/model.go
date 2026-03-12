@@ -21,9 +21,9 @@ const (
 type IpAddressType string
 
 const (
-	IpAddressTypeLan     IpAddressType = "lan"
-	IpAddressTypeWan     IpAddressType = "wan"
-	IpAddressTypeUnknown IpAddressType = "unknown"
+	IpAddressTypeLan   IpAddressType = "lan"
+	IpAddressTypeWan   IpAddressType = "wan"
+	IpAddressTypeOther IpAddressType = "other"
 )
 
 const (
