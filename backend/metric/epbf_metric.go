@@ -218,20 +218,22 @@ func (svc *EbpfNetTrafficService) frame(
 }
 
 func (svc *EbpfNetTrafficService) trafficAggregateWithDuration(srcAddr netip.Addr, dstAddr netip.Addr, delta uint64, rate float64, proto uint8) {
+	// 统计上传
 	if !IsIgnoredAddr(srcAddr) {
 		metric := getOrCreateMetrics(srcAddr, svc.metricsMap)
 		matchProtoAndCount(proto, metric)
 		if delta > 0 {
-			metric.DownloadRate += rate
-			metric.TotalDownload += delta
+			metric.UploadRate += rate
+			metric.TotalUpload += delta
 		}
 	}
+	// 统计下载
 	if !IsIgnoredAddr(dstAddr) {
 		metric := getOrCreateMetrics(dstAddr, svc.metricsMap)
 		matchProtoAndCount(proto, metric)
 		if delta > 0 {
-			metric.UploadRate += rate
-			metric.TotalUpload += delta
+			metric.DownloadRate += rate
+			metric.TotalDownload += delta
 		}
 	}
 }
