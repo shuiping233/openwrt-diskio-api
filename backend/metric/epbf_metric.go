@@ -43,6 +43,9 @@ type IPMetrics struct {
 	// 累计总量
 	TotalUpload   uint64
 	TotalDownload uint64
+	Tcp           int32
+	Udp           int32
+	Other         int32
 }
 
 type IpStatus struct {
@@ -170,6 +173,9 @@ func (svc *EbpfNetTrafficService) frame(
 	for _, m := range svc.metricsMap {
 		m.UploadRate = 0
 		m.DownloadRate = 0
+		m.Tcp = 0
+		m.Udp = 0
+		m.Other = 0
 	}
 
 	// 2. 迭代 eBPF Map 进行采样
@@ -209,6 +215,39 @@ func (svc *EbpfNetTrafficService) frame(
 	// 3. 更新时间轴并应用平滑
 	svc.lastFrameTime = now
 	svc.applySmoothing()
+}
+
+func (svc *EbpfNetTrafficService) trafficAggregateWithDuration(key bpf.BpfFlowKey, delta uint64, duration float64) {
+	// 速率 = 增量字节 / 实际耗时
+	rate := float64(delta) / duration
+
+	srcAddr := svc.parseToAddr(key.SrcAddr, key.Family)
+	dstAddr := svc.parseToAddr(key.DstAddr, key.Family)
+
+	if !IsIgnoredAddr(srcAddr) {
+		metric := getOrCreateMetrics(srcAddr, svc.metricsMap)
+		metric.UploadRate += rate
+		metric.TotalUpload += delta
+		matchProtoAndCount(key.Proto, metric)
+	}
+
+	if !IsIgnoredAddr(dstAddr) {
+		metric := getOrCreateMetrics(dstAddr, svc.metricsMap)
+		metric.DownloadRate += rate
+		metric.TotalDownload += delta
+		matchProtoAndCount(key.Proto, metric)
+	}
+}
+
+func matchProtoAndCount(proto uint8, metric *IPMetrics) {
+	switch proto {
+	case model.ProtoTCP:
+		metric.Tcp += 1
+	case model.ProtoUDP:
+		metric.Udp += 1
+	default:
+		metric.Other += 1
+	}
 }
 
 func (svc *EbpfNetTrafficService) Run(ctx context.Context) {
@@ -308,7 +347,7 @@ func (svc *EbpfNetTrafficService) GetAggregationTrafficMetric() *model.Aggregati
 		if svc.IsLanIp(ip) {
 			IpType = model.IpAddressTypeLan
 		} else if IsOtherIp(ip) {
-			IpType = model.IpAddressTypeOther
+			IpType = model.IpAddressTypeUnknown
 		}
 
 		ipStr := formatIP(ip)
@@ -352,9 +391,9 @@ func (svc *EbpfNetTrafficService) GetAggregationTrafficMetric() *model.Aggregati
 			TotalIncoming:   totalIncoming,
 			TotalOutgoing:   totalOutgoing,
 			TotalTraffic:    totalTraffic,
-			Tcp:             -1, // TODO 先这样,后面会找NetworkConnection里的值统计好之后再填进去
-			Udp:             -1, // TODO 先这样,后面会找NetworkConnection里的值统计好之后再填进去
-			Other:           -1, // TODO 先这样,后面会找NetworkConnection里的值统计好之后再填进去
+			Tcp:             value.Tcp,
+			Udp:             value.Udp,
+			Other:           value.Other,
 		})
 	}
 	return result
@@ -388,26 +427,6 @@ func (svc *EbpfNetTrafficService) applySmoothing() {
 		if m.SmoothDownloadRate < 1 {
 			m.SmoothDownloadRate = 0
 		}
-	}
-}
-
-func (svc *EbpfNetTrafficService) trafficAggregateWithDuration(key bpf.BpfFlowKey, delta uint64, duration float64) {
-	// 速率 = 增量字节 / 实际耗时
-	rate := float64(delta) / duration
-
-	srcAddr := svc.parseToAddr(key.SrcAddr, key.Family)
-	dstAddr := svc.parseToAddr(key.DstAddr, key.Family)
-
-	if !IsIgnoredAddr(srcAddr) {
-		srcMetric := getOrCreateMetrics(srcAddr, svc.metricsMap)
-		srcMetric.UploadRate += rate
-		srcMetric.TotalUpload += delta
-	}
-
-	if !IsIgnoredAddr(dstAddr) {
-		dstMetric := getOrCreateMetrics(dstAddr, svc.metricsMap)
-		dstMetric.DownloadRate += rate
-		dstMetric.TotalDownload += delta
 	}
 }
 
