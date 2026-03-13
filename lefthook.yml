@@ -1,0 +1,15 @@
+pre-commit:
+  parallel: true
+  commands:
+    go-fmt:
+      glob: "*.go"
+      run: gofmt -w {staged_files}
+      
+    go-vet:
+      run: go vet ./...
+      
+    golangci-lint:
+      run: golangci-lint run --fix
+      
+    gosec:
+      run: gosec ./...

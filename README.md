@@ -71,3 +71,14 @@ pnpm vite build --outDir ../dist/frontend  --emptyOutDir
 go mod tidy
 go build -o openwrt-monitor-api ./backend/main.go
 ```
+
+## 提交代码
+
+为了本地便捷检查代码质量,本项目使用了[lefthook](https://github.com/evilmartians/lefthook)来自动处理pre-commit hook
+
+### pre-commit
+
+```bash
+go install github.com/evilmartians/lefthook@latest
+lefthook install
+```
