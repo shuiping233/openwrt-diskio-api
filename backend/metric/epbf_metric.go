@@ -210,7 +210,7 @@ func (svc *EbpfNetTrafficService) frame(
 			break
 		}
 	}
-	
+
 	// 3. 更新时间轴并应用平滑
 	svc.lastFrameTime = now
 	svc.applySmoothing()

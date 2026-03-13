@@ -54,10 +54,9 @@ func (c *CommandRunner) Run(name string, args ...string) (string, error) {
 	return result.String(0), result.Error(1)
 }
 
-
-type AbstractCase struct{
-	reader *ReaderCases
-	runner *RunnerCase
+type AbstractCase struct {
+	reader          *ReaderCases
+	runner          *RunnerCase
 	LastCpuSnapCase *LastCpuSnapCase
 }
 
