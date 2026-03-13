@@ -17,6 +17,7 @@ import { useToast } from '../useToast';
 import { useDatabase } from '../useDatabase';
 import { useSettings } from '../useSettings';
 import { useDnsQuery } from '../useDnsQuery';
+import PaginationControls from './PaginationControls.vue';
 
 // Props
 const props = defineProps<{
@@ -128,6 +129,43 @@ const uiState = reactive({
     unknown: false,  // 未知IP组折叠状态
   }
 });
+
+// 聚合统计当前激活的Tab
+const activeAggregationTab = ref<IpAddressType>('lan');
+
+// 聚合统计各Tab的分页状态
+const aggregationPageStates = reactive<Record<IpAddressType, {
+  pageSize: number;
+  isCustomPageSize: boolean;
+  customPageSize: string;
+  currentPage: number;
+  pageInputValue: string;
+}>>({
+  lan: {
+    pageSize: 20,
+    isCustomPageSize: false,
+    customPageSize: '',
+    currentPage: 0,
+    pageInputValue: '1',
+  },
+  wan: {
+    pageSize: 20,
+    isCustomPageSize: false,
+    customPageSize: '',
+    currentPage: 0,
+    pageInputValue: '1',
+  },
+  unknown: {
+    pageSize: 20,
+    isCustomPageSize: false,
+    customPageSize: '',
+    currentPage: 0,
+    pageInputValue: '1',
+  },
+});
+
+// 聚合统计分页大小选项
+const aggregationPageSizeOptions = [10, 20, 50, 100];
 
 // 加载折叠状态
 onMounted(async () => {
@@ -1028,6 +1066,117 @@ const switchToPresetSize = async (size: number) => {
   await setConfig('network_table_page_size', size);
 };
 
+// ================= 聚合统计分页相关配置 =================
+
+// 获取当前激活Tab的分页状态
+const currentAggregationState = computed(() => aggregationPageStates[activeAggregationTab.value]);
+
+// 获取当前激活Tab的IP列表
+const currentAggregationIps = computed(() => {
+  const group = aggregationData.value[activeAggregationTab.value];
+  return group?.ips || [];
+});
+
+// 计算分页后的数据
+const paginatedAggregationIps = computed(() => {
+  const state = currentAggregationState.value;
+  const allIps = currentAggregationIps.value;
+  const start = state.currentPage * state.pageSize;
+  const end = start + state.pageSize;
+  return allIps.slice(start, end);
+});
+
+// 计算总页数
+const aggregationPageCount = computed(() => {
+  const state = currentAggregationState.value;
+  const total = currentAggregationIps.value.length;
+  return Math.ceil(total / state.pageSize) || 1;
+});
+
+// 能否上一页
+const canAggregationPreviousPage = computed(() => currentAggregationState.value.currentPage > 0);
+
+// 能否下一页
+const canAggregationNextPage = computed(() => {
+  const state = currentAggregationState.value;
+  return state.currentPage < aggregationPageCount.value - 1;
+});
+
+// 切换到聚合统计预设分页大小
+const switchAggregationToPresetSize = (size: number) => {
+  const state = currentAggregationState.value;
+  state.pageSize = size;
+  state.isCustomPageSize = false;
+  state.customPageSize = '';
+  // 切换分页大小时保持当前页码，但确保页码有效
+  const total = currentAggregationIps.value.length;
+  const totalPages = Math.ceil(total / size);
+  state.currentPage = totalPages > 0 ? Math.min(state.currentPage, totalPages - 1) : 0;
+  state.pageInputValue = String(state.currentPage + 1);
+};
+
+// 处理聚合统计自定义分页大小变更
+const handleAggregationCustomPageSizeChange = () => {
+  const state = currentAggregationState.value;
+  const value = parseInt(state.customPageSize, 10);
+  if (!isNaN(value) && value > 0) {
+    state.pageSize = value;
+    state.isCustomPageSize = true;
+    // 切换分页大小时保持当前页码，但确保页码有效
+    const total = currentAggregationIps.value.length;
+    const totalPages = Math.ceil(total / value);
+    state.currentPage = totalPages > 0 ? Math.min(state.currentPage, totalPages - 1) : 0;
+    state.pageInputValue = String(state.currentPage + 1);
+  }
+};
+
+// 聚合统计跳转到指定页
+const jumpToAggregationPage = () => {
+  const state = currentAggregationState.value;
+  const targetPage = parseInt(state.pageInputValue, 10);
+  if (isNaN(targetPage) || targetPage < 1) {
+    state.pageInputValue = String(state.currentPage + 1);
+    return;
+  }
+  const totalPages = aggregationPageCount.value;
+  const validPage = Math.min(Math.max(targetPage, 1), totalPages);
+  state.currentPage = validPage - 1;
+  state.pageInputValue = String(validPage);
+};
+
+// 设置聚合统计页码
+const setAggregationPageIndex = (index: number) => {
+  const state = currentAggregationState.value;
+  const totalPages = aggregationPageCount.value;
+  state.currentPage = Math.min(Math.max(index, 0), totalPages - 1);
+  state.pageInputValue = String(state.currentPage + 1);
+};
+
+// 聚合统计上一页
+const previousAggregationPage = () => {
+  if (canAggregationPreviousPage.value) {
+    const state = currentAggregationState.value;
+    state.currentPage--;
+    state.pageInputValue = String(state.currentPage + 1);
+  }
+};
+
+// 聚合统计下一页
+const nextAggregationPage = () => {
+  if (canAggregationNextPage.value) {
+    const state = currentAggregationState.value;
+    state.currentPage++;
+    state.pageInputValue = String(state.currentPage + 1);
+  }
+};
+
+// 切换Tab时重置页码到第一页
+watch(activeAggregationTab, () => {
+  const state = currentAggregationState.value;
+  state.currentPage = 0;
+  state.pageInputValue = '1';
+});
+
 // 监听数据变化，仅处理页码越界的情况
 watch(displayData, () => {
   // 使用 nextTick 确保 TanStack Table 已经处理了数据变化
@@ -1236,6 +1385,45 @@ const getConnectionSortIcon = (columnId: string): string => {
           </div>
         </div>
 
+        <!-- Tab 切换导航 -->
+        <div class="border-b border-slate-700">
+          <nav class="flex" aria-label="Tabs">
+            <button v-for="group in [aggregationData.lan, aggregationData.wan, aggregationData.unknown]" :key="group.key"
+              @click="activeAggregationTab = group.key"
+              class="flex-1 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
+              :class="[
+                activeAggregationTab === group.key
+                  ? 'border-blue-500 text-blue-400 bg-slate-700/30'
+                  : 'border-transparent text-slate-400 hover:text-slate-300 hover:bg-slate-700/20'
+              ]">
+              <span class="flex items-center justify-center gap-2">
+                <span>{{ group.name }}</span>
+                <span class="text-xs px-2 py-0.5 rounded-full bg-slate-700 text-slate-300">{{ group.ips.length }}</span>
+              </span>
+            </button>
+          </nav>
+        </div>
+
+        <!-- 当前选中分组的汇总信息 -->
+        <div class="px-4 py-2 bg-slate-700/20 border-b border-slate-700">
+          <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+            <span class="text-slate-400">总实时速率: <span class="text-slate-200 font-mono">{{
+              formatThroughput(aggregationData[activeAggregationTab].totalThroughput) }}</span></span>
+            <span class="text-slate-400">上行速率: <span class="text-orange-400 font-mono">{{
+              formatThroughput(aggregationData[activeAggregationTab].UploadThroughput) }}</span></span>
+            <span class="text-slate-400">下行速率: <span class="text-cyan-400 font-mono">{{
+              formatThroughput(aggregationData[activeAggregationTab].DownloadThroughput) }}</span></span>
+            <span class="text-slate-400">累计流量: <span class="text-slate-200 font-mono">{{
+              formatTraffic(aggregationData[activeAggregationTab].totalTraffic) }}</span></span>
+            <span class="text-slate-400">TCP: <span class="text-blue-400 font-mono">{{
+              aggregationData[activeAggregationTab].totalTcp }}</span></span>
+            <span class="text-slate-400">UDP: <span class="text-violet-400 font-mono">{{
+              aggregationData[activeAggregationTab].totalUdp }}</span></span>
+            <span class="text-slate-400">其他: <span class="text-slate-200 font-mono">{{
+              aggregationData[activeAggregationTab].totalOther }}</span></span>
+          </div>
+        </div>
+
         <div class="overflow-x-auto">
           <table class="w-full text-sm text-center border-collapse">
             <thead class="bg-slate-700/50 text-slate-300">
@@ -1313,103 +1501,86 @@ const getConnectionSortIcon = (columnId: string): string => {
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-700">
-              <template v-for="group in [aggregationData.lan, aggregationData.wan, aggregationData.unknown]"
-                :key="group.key">
-                <!-- 分组标题行 -->
-                <tr class="bg-slate-700/30 hover:bg-slate-700/50 transition-colors cursor-pointer"
-                  @click="toggleIpGroup(group.key)">
-                  <td colspan="10" class="px-3 py-3 text-left">
-                    <div class="flex items-center justify-between">
-                      <div class="flex items-center gap-2">
-                        <span class="text-slate-500 transition-transform duration-300"
-                          :class="{ 'rotate-180': !uiState.ipGroupCollapsed[group.key] }">▼</span>
-                        <span class="font-semibold text-slate-200">{{ group.name }}</span>
-                        <span class="text-xs text-slate-500">({{ group.ips.length }} 个 IP)</span>
-                      </div>
-                      <div class="flex items-center gap-4 text-xs">
-                        <span class="text-slate-400">总实时速率: <span class="text-slate-200 font-mono">{{
-                          formatThroughput(group.totalThroughput) }}</span></span>
-                        <span class="text-slate-400">上行速率: <span class="text-orange-400 font-mono">{{
-                          formatThroughput(group.UploadThroughput) }}</span></span>
-                        <span class="text-slate-400">下行速率: <span class="text-cyan-400 font-mono">{{
-                          formatThroughput(group.DownloadThroughput) }}</span></span>
-                        <span class="text-slate-400">累计上下行流量: <span class="text-slate-200 font-mono">{{
-                          formatTraffic(group.totalTraffic) }}</span></span>
-                        <span class="text-slate-400">累计上行流量: <span class="text-orange-400 font-mono">{{
-                          formatTraffic(group.totalUpload) }}</span></span>
-                        <span class="text-slate-400">累计下行流量: <span class="text-cyan-400 font-mono">{{
-                          formatTraffic(group.totalDownload) }}</span></span>
-                        <span class="text-slate-400">TCP: <span class="text-blue-400 font-mono">{{
-                          group.totalTcp }}</span></span>
-                        <span class="text-slate-400">UDP: <span class="text-violet-400 font-mono">{{
-                          group.totalUdp }}</span></span>
-                        <span class="text-slate-400">其他: <span class="text-slate-200 font-mono">{{
-                          group.totalOther }}</span></span>
-                      </div>
-                    </div>
-                  </td>
-                </tr>
-                <!-- 分组详细行 -->
-                <tr v-for="ipStats in group.ips" :key="ipStats.ip" v-show="!uiState.ipGroupCollapsed[group.key]"
-                  :class="['hover:bg-slate-700/30 transition-colors', getThroughputBgClass(ipStats.totalThroughput.unit)]">
-                  <td class="px-3 py-2 text-center">
-                    <span class="font-mono text-slate-300" :title="ipStats.ip">{{ ipStats.ipFamily == "ipv4" ?
-                      getIpDisplay(ipStats.ip) : getIpv6Display(ipStats.ip, true) }}</span>
-                  </td>
-                  <td class="px-3 py-2 text-center">
-                    <span class="font-mono text-slate-200">{{
-                      BytesFixed(ipStats.totalThroughput.value, ipStats.totalThroughput.unit) }} {{
-                        ipStats.totalThroughput.unit
-                      }}</span>
-                  </td>
-                  <td class="px-3 py-2 text-center">
-                    <span class="font-mono text-orange-400">{{
-                      BytesFixed(ipStats.uploadThroughput.value, ipStats.uploadThroughput.unit) }} {{
-                        ipStats.uploadThroughput.unit
-                      }}</span>
-                  </td>
-                  <td class="px-3 py-2 text-center">
-                    <span class="font-mono text-cyan-400">{{
-                      BytesFixed(ipStats.downloadThroughput.value, ipStats.downloadThroughput.unit) }} {{
-                        ipStats.downloadThroughput.unit
-                      }}</span>
-                  </td>
-                  <td class="px-3 py-2 text-center">
-                    <span class="font-mono text-slate-200">{{
-                      BytesFixed(ipStats.totalTraffic.value, ipStats.totalTraffic.unit) }} {{
-                        ipStats.totalTraffic.unit
-                      }}</span>
-                  </td>
-                  <td class="px-3 py-2 text-center">
-                    <span class="font-mono text-orange-400">{{
-                      BytesFixed(ipStats.totalUpload.value, ipStats.totalUpload.unit) }} {{
-                        ipStats.totalUpload.unit
-                      }}</span>
-                  </td>
-                  <td class="px-3 py-2 text-center">
-                    <span class="font-mono text-cyan-400">{{
-                      BytesFixed(ipStats.totalDownload.value, ipStats.totalDownload.unit) }} {{
-                        ipStats.totalDownload.unit
-                      }}</span>
-                  </td>
-                  <td class="px-3 py-2 text-center">
-                    <span class="font-mono text-blue-400">{{ ipStats.tcpCount }}</span>
-                  </td>
-                  <td class="px-3 py-2 text-center">
-                    <span class="font-mono text-violet-400">{{ ipStats.udpCount }}</span>
-                  </td>
-                  <td class="px-3 py-2 text-center">
-                    <span class="font-mono text-slate-200">{{ ipStats.otherCount }}</span>
-                  </td>
-                </tr>
-                <!-- 空数据提示 -->
-                <tr v-if="group.ips.length === 0 && !uiState.ipGroupCollapsed[group.key]">
-                  <td colspan="10" class="px-5 py-4 text-center text-slate-500 text-xs">暂无{{ group.name }}数据</td>
-                </tr>
-              </template>
+              <!-- 分页后的数据 -->
+              <tr v-for="ipStats in paginatedAggregationIps" :key="ipStats.ip"
+                :class="['hover:bg-slate-700/30 transition-colors', getThroughputBgClass(ipStats.totalThroughput.unit)]">
+                <td class="px-3 py-2 text-center">
+                  <span class="font-mono text-slate-300" :title="ipStats.ip">{{ ipStats.ipFamily == "ipv4" ?
+                    getIpDisplay(ipStats.ip) : getIpv6Display(ipStats.ip, true) }}</span>
+                </td>
+                <td class="px-3 py-2 text-center">
+                  <span class="font-mono text-slate-200">{{
+                    BytesFixed(ipStats.totalThroughput.value, ipStats.totalThroughput.unit) }} {{
+                      ipStats.totalThroughput.unit
+                    }}</span>
+                </td>
+                <td class="px-3 py-2 text-center">
+                  <span class="font-mono text-orange-400">{{
+                    BytesFixed(ipStats.uploadThroughput.value, ipStats.uploadThroughput.unit) }} {{
+                      ipStats.uploadThroughput.unit
+                    }}</span>
+                </td>
+                <td class="px-3 py-2 text-center">
+                  <span class="font-mono text-cyan-400">{{
+                    BytesFixed(ipStats.downloadThroughput.value, ipStats.downloadThroughput.unit) }} {{
+                      ipStats.downloadThroughput.unit
+                    }}</span>
+                </td>
+                <td class="px-3 py-2 text-center">
+                  <span class="font-mono text-slate-200">{{
+                    BytesFixed(ipStats.totalTraffic.value, ipStats.totalTraffic.unit) }} {{
+                      ipStats.totalTraffic.unit
+                    }}</span>
+                </td>
+                <td class="px-3 py-2 text-center">
+                  <span class="font-mono text-orange-400">{{
+                    BytesFixed(ipStats.totalUpload.value, ipStats.totalUpload.unit) }} {{
+                      ipStats.totalUpload.unit
+                    }}</span>
+                </td>
+                <td class="px-3 py-2 text-center">
+                  <span class="font-mono text-cyan-400">{{
+                    BytesFixed(ipStats.totalDownload.value, ipStats.totalDownload.unit) }} {{
+                      ipStats.totalDownload.unit
+                    }}</span>
+                </td>
+                <td class="px-3 py-2 text-center">
+                  <span class="font-mono text-blue-400">{{ ipStats.tcpCount }}</span>
+                </td>
+                <td class="px-3 py-2 text-center">
+                  <span class="font-mono text-violet-400">{{ ipStats.udpCount }}</span>
+                </td>
+                <td class="px-3 py-2 text-center">
+                  <span class="font-mono text-slate-200">{{ ipStats.otherCount }}</span>
+                </td>
+              </tr>
+              <!-- 空数据提示 -->
+              <tr v-if="currentAggregationIps.length === 0">
+                <td colspan="10" class="px-5 py-4 text-center text-slate-500 text-xs">暂无{{ aggregationData[activeAggregationTab].name }}数据</td>
+              </tr>
             </tbody>
           </table>
         </div>
+
+        <!-- 聚合统计分页控件 -->
+        <PaginationControls
+          :pageSize="currentAggregationState.pageSize"
+          :pageSizeOptions="aggregationPageSizeOptions"
+          :isCustomPageSize="currentAggregationState.isCustomPageSize"
+          v-model:customPageSize="currentAggregationState.customPageSize"
+          v-model:pageInputValue="currentAggregationState.pageInputValue"
+          :currentPageIndex="currentAggregationState.currentPage"
+          :pageCount="aggregationPageCount"
+          :totalRows="currentAggregationIps.length"
+          :canPreviousPage="canAggregationPreviousPage"
+          :canNextPage="canAggregationNextPage"
+          @switchToPresetSize="switchAggregationToPresetSize"
+          @handleCustomPageSizeChange="handleAggregationCustomPageSizeChange"
+          @jumpToPage="jumpToAggregationPage"
+          @setPageIndex="setAggregationPageIndex"
+          @previousPage="previousAggregationPage"
+          @nextPage="nextAggregationPage"
+        />
       </div>
     </div>
 
@@ -1499,186 +1670,24 @@ const getConnectionSortIcon = (columnId: string): string => {
         </div>
 
         <!-- 分页相关控件 -->
-        <div class="border-t border-slate-700 bg-slate-800/50">
-
-          <!-- 手机端（<= 450px）-->
-          <div class="px-4 py-4 flex flex-col gap-6 [@media(min-width:451px)]:hidden">
-            <!-- 分页大小控件：完全竖向分组排列 -->
-            <div class="flex flex-col gap-3">
-              <span class="text-xs text-slate-400">每页显示：</span>
-              <div class="flex flex-col gap-2">
-                <div class="flex gap-2">
-                  <button v-for="size in [20, 50]" :key="size" @click="switchToPresetSize(size)"
-                    class="flex-1 text-xs py-2 rounded border border-slate-600 transition-colors"
-                    :class="[!isCustomPageSize && pageSize === size ? 'bg-blue-600 border-blue-600 text-white' : 'bg-slate-700 text-slate-300']">
-                    {{ size }} 条
-                  </button>
-                </div>
-                <div class="flex gap-2">
-                  <button v-for="size in [100, 500]" :key="size" @click="switchToPresetSize(size)"
-                    class="flex-1 text-xs py-2 rounded border border-slate-600 transition-colors"
-                    :class="[!isCustomPageSize && pageSize === size ? 'bg-blue-600 border-blue-600 text-white' : 'bg-slate-700 text-slate-300']">
-                    {{ size }} 条
-                  </button>
-                </div>
-                <div class="flex gap-2 items-center">
-                  <button @click="switchToPresetSize(1000)"
-                    class="flex-1 text-xs py-2 rounded border border-slate-600 transition-colors"
-                    :class="[!isCustomPageSize && pageSize === 1000 ? 'bg-blue-600 border-blue-600 text-white' : 'bg-slate-700 text-slate-300']">
-                    1000 条
-                  </button>
-                  <div class="flex-1 flex items-center gap-1 bg-slate-900 border border-slate-600 rounded px-2">
-                    <input v-model="customPageSize" type="number" placeholder="自定义"
-                      class="w-full bg-transparent text-xs py-2 text-white outline-none"
-                      @change="handleCustomPageSizeChange" />
-                    <span class="text-[10px] text-slate-500 whitespace-nowrap">条</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- 页码控件：完全竖向分组排列 -->
-            <div class="flex flex-col gap-3">
-              <div class="flex justify-between items-center">
-                <span class="text-xs text-slate-400">第 {{ table.getState().pagination.pageIndex + 1 }} 页</span>
-                <span class="text-xs text-slate-500">共 {{ table.getPageCount() }} 页 / {{
-                  table.getFilteredRowModel().rows.length }} 条</span>
-              </div>
-              <div class="flex flex-col gap-2">
-                <div class="flex gap-2">
-                  <button @click="table.setPageIndex(0)" :disabled="!table.getCanPreviousPage()"
-                    class="flex-1 text-xs py-2 rounded bg-slate-700 text-slate-300 disabled:opacity-40 border border-slate-600">
-                    首页
-                  </button>
-                  <button @click="table.previousPage()" :disabled="!table.getCanPreviousPage()"
-                    class="flex-1 text-xs py-2 rounded bg-slate-700 text-slate-300 disabled:opacity-40 border border-slate-600">
-                    上一页
-                  </button>
-                </div>
-                <div class="flex items-center gap-2 bg-slate-900 border border-slate-600 rounded px-3 py-1">
-                  <span class="text-xs text-slate-400">跳转至</span>
-                  <input v-model="pageInputValue" type="number"
-                    class="flex-1 bg-transparent text-xs text-center text-slate-300 outline-none"
-                    @change="jumpToPage" />
-                  <span class="text-xs text-slate-400">页</span>
-                </div>
-                <div class="flex gap-2">
-                  <button @click="table.setPageIndex(table.getPageCount() - 1)" :disabled="!table.getCanNextPage()"
-                    class="flex-1 text-xs py-2 rounded bg-slate-700 text-slate-300 disabled:opacity-40 border border-slate-600">
-                    末页
-                  </button>
-                  <button @click="table.nextPage()" :disabled="!table.getCanNextPage()"
-                    class="flex-1 text-xs py-2 rounded bg-slate-700 text-slate-300 disabled:opacity-40 border border-slate-600">
-                    下一页
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- 平板端（450px - 900px）-->
-          <div
-            class="px-4 py-4 hidden [@media(min-width:451px)]:flex [@media(min-width:901px)]:hidden items-start justify-between gap-8">
-            <!-- 分页大小控件：两个一组竖向分组排列 -->
-            <div class="flex flex-col gap-3 flex-1 max-w-60">
-              <span class="text-xs text-slate-400 font-medium text-left">每页显示：</span>
-              <div class="flex flex-col gap-2">
-                <div class="flex gap-2">
-                  <button v-for="size in [20, 50]" :key="size" @click="switchToPresetSize(size)"
-                    class="flex-1 text-xs py-1.5 rounded border border-slate-600 transition-colors"
-                    :class="[!isCustomPageSize && pageSize === size ? 'bg-blue-600 border-blue-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600']">
-                    {{ size }}
-                  </button>
-                </div>
-                <div class="flex gap-2">
-                  <button v-for="size in [100, 500]" :key="size" @click="switchToPresetSize(size)"
-                    class="flex-1 text-xs py-1.5 rounded border border-slate-600 transition-colors"
-                    :class="[!isCustomPageSize && pageSize === size ? 'bg-blue-600 border-blue-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600']">
-                    {{ size }}
-                  </button>
-                </div>
-                <div class="flex gap-2">
-                  <button @click="switchToPresetSize(1000)"
-                    class="flex-1 text-xs py-1.5 rounded border border-slate-600 transition-colors"
-                    :class="[!isCustomPageSize && pageSize === 1000 ? 'bg-blue-600 border-blue-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600']">
-                    1000
-                  </button>
-                  <input v-model="customPageSize" type="number" placeholder="自定义"
-                    class="flex-1 min-w-0 bg-slate-900 border border-slate-600 rounded text-xs px-2 py-1.5 text-white outline-none focus:border-blue-400"
-                    @change="handleCustomPageSizeChange" />
-                </div>
-              </div>
-            </div>
-            <!-- 页码控件：两个一组竖向分组排列 -->
-            <div class="flex flex-col gap-3 flex-1 max-w-60">
-              <span class="text-xs text-slate-400 font-medium text-right">页码导航：</span>
-              <div class="flex flex-col gap-2">
-                <div class="flex gap-2">
-                  <button @click="table.setPageIndex(0)" :disabled="!table.getCanPreviousPage()"
-                    class="flex-1 text-xs py-1.5 rounded bg-slate-700 text-slate-300 border border-slate-600 disabled:opacity-40">首页</button>
-                  <button @click="table.previousPage()" :disabled="!table.getCanPreviousPage()"
-                    class="flex-1 text-xs py-1.5 rounded bg-slate-700 text-slate-300 border border-slate-600 disabled:opacity-40">上页</button>
-                </div>
-                <div class="flex items-center gap-2 px-2 py-1 bg-slate-900 border border-slate-600 rounded">
-                  <input v-model="pageInputValue" type="number"
-                    class="w-full bg-transparent text-xs text-center text-white outline-none" @change="jumpToPage" />
-                  <span class="text-[10px] text-slate-500 whitespace-nowrap">/ {{ table.getPageCount() }}</span>
-                </div>
-                <div class="flex gap-2">
-                  <button @click="table.setPageIndex(table.getPageCount() - 1)" :disabled="!table.getCanNextPage()"
-                    class="flex-1 text-xs py-1.5 rounded bg-slate-700 text-slate-300 border border-slate-600 disabled:opacity-40">末页</button>
-                  <button @click="table.nextPage()" :disabled="!table.getCanNextPage()"
-                    class="flex-1 text-xs py-1.5 rounded bg-slate-700 text-slate-300 border border-slate-600 disabled:opacity-40">下页</button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- pc端（>= 900px）-->
-          <div class="px-4 py-3 hidden [@media(min-width:901px)]:flex flex-wrap items-center justify-between gap-3">
-            <!-- 分页大小控件：展开成一行横向排列 -->
-            <div class="flex items-center gap-2">
-              <span class="text-xs text-slate-400">每页显示：</span>
-              <button v-for="size in pageSizeOptions" :key="size" @click="switchToPresetSize(size)"
-                class="text-xs px-2.5 py-1 rounded border border-slate-600 transition-colors" :class="{
-                  'bg-blue-600 border-blue-600 text-white': !isCustomPageSize && pageSize === size,
-                  'bg-slate-700 text-slate-300 hover:bg-slate-600': isCustomPageSize || pageSize !== size
-                }">
-                {{ size }}
-              </button>
-              <div class="flex items-center gap-1 ml-1">
-                <input v-model="customPageSize" type="number"
-                  class="w-16 text-xs px-2 py-1 rounded bg-slate-900 border border-slate-600 text-white outline-none focus:border-blue-400"
-                  @change="handleCustomPageSizeChange" />
-                <span class="text-xs text-slate-400">条</span>
-              </div>
-            </div>
-            <!-- 页码控件：展开成一行横向排列 -->
-            <div class="flex items-center gap-4">
-              <span class="text-xs text-slate-500 whitespace-nowrap">
-                共 {{ table.getFilteredRowModel().rows.length }} 条记录
-              </span>
-              <div class="flex items-center gap-1">
-                <button @click="table.setPageIndex(0)" :disabled="!table.getCanPreviousPage()"
-                  class="text-xs px-2 py-1 rounded bg-slate-700 text-slate-300 disabled:opacity-50 hover:bg-slate-600 border border-slate-600 transition-colors">首页</button>
-                <button @click="table.previousPage()" :disabled="!table.getCanPreviousPage()"
-                  class="text-xs px-2 py-1 rounded bg-slate-700 text-slate-300 disabled:opacity-50 hover:bg-slate-600 border border-slate-600 transition-colors">上一页</button>
-
-                <div class="flex items-center gap-1 px-3">
-                  <input v-model="pageInputValue" type="number"
-                    class="w-12 text-xs px-1 py-1 rounded bg-slate-900 border border-slate-600 text-white text-center outline-none focus:border-blue-400"
-                    @change="jumpToPage" />
-                  <span class="text-xs text-slate-400">/ {{ table.getPageCount() }}</span>
-                </div>
-
-                <button @click="table.nextPage()" :disabled="!table.getCanNextPage()"
-                  class="text-xs px-2 py-1 rounded bg-slate-700 text-slate-300 disabled:opacity-50 hover:bg-slate-600 border border-slate-600 transition-colors">下一页</button>
-                <button @click="table.setPageIndex(table.getPageCount() - 1)" :disabled="!table.getCanNextPage()"
-                  class="text-xs px-2 py-1 rounded bg-slate-700 text-slate-300 disabled:opacity-50 hover:bg-slate-600 border border-slate-600 transition-colors">末页</button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <PaginationControls
+          v-model:pageSize="pageSize"
+          v-model:isCustomPageSize="isCustomPageSize"
+          v-model:customPageSize="customPageSize"
+          v-model:pageInputValue="pageInputValue"
+          :pageSizeOptions="pageSizeOptions"
+          :currentPageIndex="currentPage"
+          :pageCount="table.getPageCount()"
+          :totalRows="table.getFilteredRowModel().rows.length"
+          :canPreviousPage="table.getCanPreviousPage()"
+          :canNextPage="table.getCanNextPage()"
+          @switchToPresetSize="switchToPresetSize"
+          @handleCustomPageSizeChange="handleCustomPageSizeChange"
+          @jumpToPage="jumpToPage"
+          @setPageIndex="(index) => table.setPageIndex(index)"
+          @previousPage="table.previousPage()"
+          @nextPage="table.nextPage()"
+        />
 
       </div>
     </div>
