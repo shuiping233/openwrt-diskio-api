@@ -12,6 +12,7 @@ import {
   ColumnFiltersState
 } from '@tanstack/vue-table';
 import type { ConnectionApiResponse, AggregationTrafficResponse, AggregationTrafficDetails, IpAddressType, IpFamilyType } from '../model';
+import { IpAddressTypeList } from '../model';
 import { convertToBytes, BytesFixed, formatIOBytes, normalizeToBytes, formatDataBytes } from '../utils/convert';
 import { useToast } from '../useToast';
 import { useDatabase } from '../useDatabase';
@@ -26,7 +27,7 @@ const props = defineProps<{
 }>();
 
 // Database
-const { getAccordionState, setAccordionState } = useDatabase();
+const { getAccordionState, setAccordionState, getNavState, setNavState } = useDatabase();
 
 // DNS Query
 const { queryDns, getCachedHostname } = useDnsQuery();
@@ -130,6 +131,9 @@ const uiState = reactive({
   }
 });
 
+// 聚合统计分页大小选项（必须在前面定义，后续会用到）
+const aggregationPageSizeOptions = [10, 20, 50, 100];
+
 // 聚合统计当前激活的Tab
 const activeAggregationTab = ref<IpAddressType>('lan');
 
@@ -142,30 +146,27 @@ const aggregationPageStates = reactive<Record<IpAddressType, {
   pageInputValue: string;
 }>>({
   lan: {
-    pageSize: 20,
+    pageSize: aggregationPageSizeOptions[0],
     isCustomPageSize: false,
     customPageSize: '',
     currentPage: 0,
     pageInputValue: '1',
   },
   wan: {
-    pageSize: 20,
+    pageSize: aggregationPageSizeOptions[0],
     isCustomPageSize: false,
     customPageSize: '',
     currentPage: 0,
     pageInputValue: '1',
   },
   unknown: {
-    pageSize: 20,
+    pageSize: aggregationPageSizeOptions[0],
     isCustomPageSize: false,
     customPageSize: '',
     currentPage: 0,
     pageInputValue: '1',
   },
 });
-
-// 聚合统计分页大小选项
-const aggregationPageSizeOptions = [10, 20, 50, 100];
 
 // 加载折叠状态
 onMounted(async () => {
@@ -180,20 +181,13 @@ onMounted(async () => {
     uiState.accordions.connectionList = connectionListState;
   }
 
-  // IP分组折叠状态
-  const lanGroupState = await getAccordionState('network_connection_lan_group');
-  if (lanGroupState !== undefined) {
-    uiState.ipGroupCollapsed.lan = !lanGroupState; // 注意：存储的是展开状态，我们用的是折叠状态
-  }
-
-  const wanGroupState = await getAccordionState('network_connection_wan_group');
-  if (wanGroupState !== undefined) {
-    uiState.ipGroupCollapsed.wan = !wanGroupState;
-  }
-
-  const unknownGroupState = await getAccordionState('network_connection_unknown_group');
-  if (unknownGroupState !== undefined) {
-    uiState.ipGroupCollapsed.unknown = !unknownGroupState;
+  // 加载聚合统计当前选中的Tab
+  const savedTab = await getNavState('network_connection_aggregation_active_tab');
+  if (savedTab !== undefined && savedTab) {
+    const validTab = savedTab as IpAddressType;
+    if (IpAddressTypeList.includes(validTab)) {
+      activeAggregationTab.value = validTab;
+    }
   }
 });
 
@@ -202,18 +196,6 @@ const toggleMainAccordion = async (key: 'aggregation' | 'connectionList') => {
   uiState.accordions[key] = !uiState.accordions[key];
   const storageKey = key === 'aggregation' ? 'network_connection_aggregation' : 'network_connection_list';
   await setAccordionState(storageKey, uiState.accordions[key]);
-};
-
-// 切换IP分组折叠状态
-const toggleIpGroup = async (group: IpAddressType) => {
-  uiState.ipGroupCollapsed[group] = !uiState.ipGroupCollapsed[group];
-  const storageKeyMap: Record<IpAddressType, string> = {
-    lan: 'network_connection_lan_group',
-    wan: 'network_connection_wan_group',
-    unknown: 'network_connection_unknown_group'
-  };
-  // 存储展开状态（与折叠状态相反）
-  await setAccordionState(storageKeyMap[group], !uiState.ipGroupCollapsed[group]);
 };
 
 // 格式化流量统计起始时间
@@ -1170,12 +1152,30 @@ const nextAggregationPage = () => {
   }
 };
 
-// 切换Tab时重置页码到第一页
-watch(activeAggregationTab, () => {
+// 切换Tab时重置页码到第一页，并保存到数据库
+watch(activeAggregationTab, async (newTab) => {
   const state = currentAggregationState.value;
   state.currentPage = 0;
   state.pageInputValue = '1';
+  // 保存当前选中的Tab到数据库
+  await setNavState('network_connection_aggregation_active_tab', newTab);
 });
+
+// 监听聚合统计数据变化，检查页码越界
+watch(() => currentAggregationIps.value, () => {
+  nextTick(() => {
+    const state = currentAggregationState.value;
+    const totalPages = Math.max(1, aggregationPageCount.value);
+    const currentIndex = state.currentPage;
+
+    // 如果当前页码超过最大页数，跳到最后一页
+    if (currentIndex >= totalPages) {
+      const newIndex = totalPages - 1;
+      state.currentPage = newIndex;
+      state.pageInputValue = String(newIndex + 1);
+    }
+  });
+}, { immediate: true });
 
 // 监听数据变化，仅处理页码越界的情况
 watch(displayData, () => {
@@ -1371,7 +1371,7 @@ const getConnectionSortIcon = (columnId: string): string => {
           <div class="flex items-center gap-2 text-xs sm:text-sm shrink-0 md:flex-1 md:justify-center">
             <span class="text-slate-400">流量统计起始时间:</span>
             <span class="text-slate-300 font-mono">{{ formatCaptureStartTime(aggregationData?.capture_start_at)
-            }}</span>
+              }}</span>
           </div>
           <!-- 全局搜索框（右侧） -->
           <div class="relative w-full md:w-auto">
@@ -1388,10 +1388,9 @@ const getConnectionSortIcon = (columnId: string): string => {
         <!-- Tab 切换导航 -->
         <div class="border-b border-slate-700">
           <nav class="flex" aria-label="Tabs">
-            <button v-for="group in [aggregationData.lan, aggregationData.wan, aggregationData.unknown]" :key="group.key"
-              @click="activeAggregationTab = group.key"
-              class="flex-1 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
-              :class="[
+            <button v-for="group in [aggregationData.lan, aggregationData.wan, aggregationData.unknown]"
+              :key="group.key" @click="activeAggregationTab = group.key"
+              class="flex-1 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap" :class="[
                 activeAggregationTab === group.key
                   ? 'border-blue-500 text-blue-400 bg-slate-700/30'
                   : 'border-transparent text-slate-400 hover:text-slate-300 hover:bg-slate-700/20'
@@ -1556,31 +1555,24 @@ const getConnectionSortIcon = (columnId: string): string => {
               </tr>
               <!-- 空数据提示 -->
               <tr v-if="currentAggregationIps.length === 0">
-                <td colspan="10" class="px-5 py-4 text-center text-slate-500 text-xs">暂无{{ aggregationData[activeAggregationTab].name }}数据</td>
+                <td colspan="10" class="px-5 py-4 text-center text-slate-500 text-xs">暂无{{
+                  aggregationData[activeAggregationTab].name }}数据</td>
               </tr>
             </tbody>
           </table>
         </div>
 
         <!-- 聚合统计分页控件 -->
-        <PaginationControls
-          :pageSize="currentAggregationState.pageSize"
-          :pageSizeOptions="aggregationPageSizeOptions"
+        <PaginationControls :pageSize="currentAggregationState.pageSize" :pageSizeOptions="aggregationPageSizeOptions"
           :isCustomPageSize="currentAggregationState.isCustomPageSize"
           v-model:customPageSize="currentAggregationState.customPageSize"
           v-model:pageInputValue="currentAggregationState.pageInputValue"
-          :currentPageIndex="currentAggregationState.currentPage"
-          :pageCount="aggregationPageCount"
-          :totalRows="currentAggregationIps.length"
-          :canPreviousPage="canAggregationPreviousPage"
-          :canNextPage="canAggregationNextPage"
-          @switchToPresetSize="switchAggregationToPresetSize"
-          @handleCustomPageSizeChange="handleAggregationCustomPageSizeChange"
-          @jumpToPage="jumpToAggregationPage"
-          @setPageIndex="setAggregationPageIndex"
-          @previousPage="previousAggregationPage"
-          @nextPage="nextAggregationPage"
-        />
+          :currentPageIndex="currentAggregationState.currentPage" :pageCount="aggregationPageCount"
+          :totalRows="currentAggregationIps.length" :canPreviousPage="canAggregationPreviousPage"
+          :canNextPage="canAggregationNextPage" @switchToPresetSize="switchAggregationToPresetSize"
+          @handleCustomPageSizeChange="handleAggregationCustomPageSizeChange" @jumpToPage="jumpToAggregationPage"
+          @setPageIndex="setAggregationPageIndex" @previousPage="previousAggregationPage"
+          @nextPage="nextAggregationPage" />
       </div>
     </div>
 
@@ -1670,24 +1662,14 @@ const getConnectionSortIcon = (columnId: string): string => {
         </div>
 
         <!-- 分页相关控件 -->
-        <PaginationControls
-          v-model:pageSize="pageSize"
-          v-model:isCustomPageSize="isCustomPageSize"
-          v-model:customPageSize="customPageSize"
-          v-model:pageInputValue="pageInputValue"
-          :pageSizeOptions="pageSizeOptions"
-          :currentPageIndex="currentPage"
-          :pageCount="table.getPageCount()"
-          :totalRows="table.getFilteredRowModel().rows.length"
-          :canPreviousPage="table.getCanPreviousPage()"
-          :canNextPage="table.getCanNextPage()"
-          @switchToPresetSize="switchToPresetSize"
-          @handleCustomPageSizeChange="handleCustomPageSizeChange"
-          @jumpToPage="jumpToPage"
-          @setPageIndex="(index) => table.setPageIndex(index)"
-          @previousPage="table.previousPage()"
-          @nextPage="table.nextPage()"
-        />
+        <PaginationControls v-model:pageSize="pageSize" v-model:isCustomPageSize="isCustomPageSize"
+          v-model:customPageSize="customPageSize" v-model:pageInputValue="pageInputValue"
+          :pageSizeOptions="pageSizeOptions" :currentPageIndex="currentPage" :pageCount="table.getPageCount()"
+          :totalRows="table.getFilteredRowModel().rows.length" :canPreviousPage="table.getCanPreviousPage()"
+          :canNextPage="table.getCanNextPage()" @switchToPresetSize="switchToPresetSize"
+          @handleCustomPageSizeChange="handleCustomPageSizeChange" @jumpToPage="jumpToPage"
+          @setPageIndex="(index) => table.setPageIndex(index)" @previousPage="table.previousPage()"
+          @nextPage="table.nextPage()" />
 
       </div>
     </div>

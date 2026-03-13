@@ -110,6 +110,7 @@ export interface UserSetting {
 
 // ================= 聚合流量统计结构 =================
 export type IpAddressType = "lan" | "wan" | "unknown";
+export const IpAddressTypeList = ["lan", "wan", "unknown"];
 export type IpFamilyType = "ipv4" | "ipv6";
 
 export interface MetricUnit {

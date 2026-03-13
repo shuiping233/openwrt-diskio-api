@@ -4,8 +4,8 @@ import { computed } from 'vue';
 interface Props {
   // 分页大小
   pageSize: number;
-  // 分页大小选项
-  pageSizeOptions: number[];
+  // 分页大小选项（可选，有默认值 [20, 50, 100, 500, 1000]）
+  pageSizeOptions?: number[];
   // 是否自定义分页大小
   isCustomPageSize: boolean;
   // 自定义分页大小输入值
@@ -25,6 +25,12 @@ interface Props {
 }
 
 const props = defineProps<Props>();
+
+// 默认分页大小选项（连接列表使用）
+const defaultPageSizeOptions = [20, 50, 100, 500, 1000];
+
+// 实际使用的分页大小选项（使用传入值或默认值）
+const effectivePageSizeOptions = computed(() => props.pageSizeOptions ?? defaultPageSizeOptions);
 
 const emit = defineEmits<{
   'update:pageSize': [value: number];
@@ -71,6 +77,17 @@ const onNextPage = () => {
 
 // 当前显示页码（从1开始）
 const displayPageIndex = computed(() => props.currentPageIndex + 1);
+
+// 根据 pageSizeOptions 动态计算分组（用于不同布局）
+// 手机端和平板端：每行2个按钮
+const pageSizePairs = computed(() => {
+  const options = effectivePageSizeOptions.value;
+  const pairs: number[][] = [];
+  for (let i = 0; i < options.length; i += 2) {
+    pairs.push(options.slice(i, i + 2));
+  }
+  return pairs;
+});
 </script>
 
 <template>
@@ -81,26 +98,24 @@ const displayPageIndex = computed(() => props.currentPageIndex + 1);
       <div class="flex flex-col gap-3">
         <span class="text-xs text-slate-400">每页显示：</span>
         <div class="flex flex-col gap-2">
-          <div class="flex gap-2">
-            <button v-for="size in [20, 50]" :key="size" @click="onSwitchToPresetSize(size)"
+          <div v-for="(pair, pairIndex) in pageSizePairs" :key="pairIndex" class="flex gap-2">
+            <button v-for="size in pair" :key="size" @click="onSwitchToPresetSize(size)"
               class="flex-1 text-xs py-2 rounded border border-slate-600 transition-colors"
               :class="[!isCustomPageSize && pageSize === size ? 'bg-blue-600 border-blue-600 text-white' : 'bg-slate-700 text-slate-300']">
               {{ size }} 条
             </button>
+            <!-- 如果是最后一行且按钮数量为奇数，填充自定义输入框 -->
+            <template v-if="pairIndex === pageSizePairs.length - 1 && pair.length === 1">
+              <div class="flex-1 flex items-center gap-1 bg-slate-900 border border-slate-600 rounded px-2">
+                <input :value="customPageSize" @input="$emit('update:customPageSize', ($event.target as HTMLInputElement).value)" type="number" placeholder="自定义"
+                  class="w-full bg-transparent text-xs py-2 text-white outline-none"
+                  @change="onHandleCustomPageSizeChange" />
+                <span class="text-[10px] text-slate-500 whitespace-nowrap">条</span>
+              </div>
+            </template>
           </div>
-          <div class="flex gap-2">
-            <button v-for="size in [100, 500]" :key="size" @click="onSwitchToPresetSize(size)"
-              class="flex-1 text-xs py-2 rounded border border-slate-600 transition-colors"
-              :class="[!isCustomPageSize && pageSize === size ? 'bg-blue-600 border-blue-600 text-white' : 'bg-slate-700 text-slate-300']">
-              {{ size }} 条
-            </button>
-          </div>
-          <div class="flex gap-2 items-center">
-            <button @click="onSwitchToPresetSize(1000)"
-              class="flex-1 text-xs py-2 rounded border border-slate-600 transition-colors"
-              :class="[!isCustomPageSize && pageSize === 1000 ? 'bg-blue-600 border-blue-600 text-white' : 'bg-slate-700 text-slate-300']">
-              1000 条
-            </button>
+          <!-- 如果选项数量是偶数，单独一行显示自定义输入 -->
+          <div v-if="effectivePageSizeOptions.length % 2 === 0" class="flex gap-2 items-center">
             <div class="flex-1 flex items-center gap-1 bg-slate-900 border border-slate-600 rounded px-2">
               <input :value="customPageSize" @input="$emit('update:customPageSize', ($event.target as HTMLInputElement).value)" type="number" placeholder="自定义"
                 class="w-full bg-transparent text-xs py-2 text-white outline-none"
@@ -156,26 +171,21 @@ const displayPageIndex = computed(() => props.currentPageIndex + 1);
       <div class="flex flex-col gap-3 flex-1 max-w-60">
         <span class="text-xs text-slate-400 font-medium text-left">每页显示：</span>
         <div class="flex flex-col gap-2">
-          <div class="flex gap-2">
-            <button v-for="size in [20, 50]" :key="size" @click="onSwitchToPresetSize(size)"
+          <div v-for="(pair, pairIndex) in pageSizePairs" :key="pairIndex" class="flex gap-2">
+            <button v-for="size in pair" :key="size" @click="onSwitchToPresetSize(size)"
               class="flex-1 text-xs py-1.5 rounded border border-slate-600 transition-colors"
               :class="[!isCustomPageSize && pageSize === size ? 'bg-blue-600 border-blue-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600']">
               {{ size }}
             </button>
+            <!-- 如果是最后一行且按钮数量为奇数，填充自定义输入框 -->
+            <template v-if="pairIndex === pageSizePairs.length - 1 && pair.length === 1">
+              <input :value="customPageSize" @input="$emit('update:customPageSize', ($event.target as HTMLInputElement).value)" type="number" placeholder="自定义"
+                class="flex-1 min-w-0 bg-slate-900 border border-slate-600 rounded text-xs px-2 py-1.5 text-white outline-none focus:border-blue-400"
+                @change="onHandleCustomPageSizeChange" />
+            </template>
           </div>
-          <div class="flex gap-2">
-            <button v-for="size in [100, 500]" :key="size" @click="onSwitchToPresetSize(size)"
-              class="flex-1 text-xs py-1.5 rounded border border-slate-600 transition-colors"
-              :class="[!isCustomPageSize && pageSize === size ? 'bg-blue-600 border-blue-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600']">
-              {{ size }}
-            </button>
-          </div>
-          <div class="flex gap-2">
-            <button @click="onSwitchToPresetSize(1000)"
-              class="flex-1 text-xs py-1.5 rounded border border-slate-600 transition-colors"
-              :class="[!isCustomPageSize && pageSize === 1000 ? 'bg-blue-600 border-blue-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600']">
-              1000
-            </button>
+          <!-- 如果选项数量是偶数，单独一行显示自定义输入 -->
+          <div v-if="effectivePageSizeOptions.length % 2 === 0" class="flex gap-2">
             <input :value="customPageSize" @input="$emit('update:customPageSize', ($event.target as HTMLInputElement).value)" type="number" placeholder="自定义"
               class="flex-1 min-w-0 bg-slate-900 border border-slate-600 rounded text-xs px-2 py-1.5 text-white outline-none focus:border-blue-400"
               @change="onHandleCustomPageSizeChange" />
@@ -212,7 +222,7 @@ const displayPageIndex = computed(() => props.currentPageIndex + 1);
       <!-- 分页大小控件：展开成一行横向排列 -->
       <div class="flex items-center gap-2">
         <span class="text-xs text-slate-400">每页显示：</span>
-        <button v-for="size in pageSizeOptions" :key="size" @click="onSwitchToPresetSize(size)"
+        <button v-for="size in effectivePageSizeOptions" :key="size" @click="onSwitchToPresetSize(size)"
           class="text-xs px-2.5 py-1 rounded border border-slate-600 transition-colors" :class="{
             'bg-blue-600 border-blue-600 text-white': !isCustomPageSize && pageSize === size,
             'bg-slate-700 text-slate-300 hover:bg-slate-600': isCustomPageSize || pageSize !== size
