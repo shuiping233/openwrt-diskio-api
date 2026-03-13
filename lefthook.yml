@@ -6,12 +6,15 @@ pre-commit:
       run: gofmt -w {staged_files}
       
     go-vet:
+      root: "backend/"
       run: go vet ./...
       
     golangci-lint:
+      root: "backend/"
       run: golangci-lint run --fix
       
     gosec:
+      root: "backend/"
       run: gosec ./...
 
     # go-test:
