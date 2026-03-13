@@ -16,7 +16,7 @@ import { IpAddressTypeList } from '../model';
 import { convertToBytes, BytesFixed, formatIOBytes, normalizeToBytes, formatDataBytes } from '../utils/convert';
 import { useToast } from '../useToast';
 import { useDatabase } from '../useDatabase';
-import { useSettings } from '../useSettings';
+import { useSettings, Settings } from '../useSettings';
 import { useDnsQuery } from '../useDnsQuery';
 import PaginationControls from './PaginationControls.vue';
 
@@ -146,23 +146,23 @@ const aggregationPageStates = reactive<Record<IpAddressType, {
   pageInputValue: string;
 }>>({
   lan: {
-    pageSize: aggregationPageSizeOptions[0],
-    isCustomPageSize: false,
-    customPageSize: '',
+    pageSize: settings.aggregation_lan_page_size || aggregationPageSizeOptions[0],
+    isCustomPageSize: !aggregationPageSizeOptions.includes(settings.aggregation_lan_page_size),
+    customPageSize: !aggregationPageSizeOptions.includes(settings.aggregation_lan_page_size) ? String(settings.aggregation_lan_page_size) : '',
     currentPage: 0,
     pageInputValue: '1',
   },
   wan: {
-    pageSize: aggregationPageSizeOptions[0],
-    isCustomPageSize: false,
-    customPageSize: '',
+    pageSize: settings.aggregation_wan_page_size || aggregationPageSizeOptions[0],
+    isCustomPageSize: !aggregationPageSizeOptions.includes(settings.aggregation_wan_page_size),
+    customPageSize: !aggregationPageSizeOptions.includes(settings.aggregation_wan_page_size) ? String(settings.aggregation_wan_page_size) : '',
     currentPage: 0,
     pageInputValue: '1',
   },
   unknown: {
-    pageSize: aggregationPageSizeOptions[0],
-    isCustomPageSize: false,
-    customPageSize: '',
+    pageSize: settings.aggregation_unknown_page_size || aggregationPageSizeOptions[0],
+    isCustomPageSize: !aggregationPageSizeOptions.includes(settings.aggregation_unknown_page_size),
+    customPageSize: !aggregationPageSizeOptions.includes(settings.aggregation_unknown_page_size) ? String(settings.aggregation_unknown_page_size) : '',
     currentPage: 0,
     pageInputValue: '1',
   },
@@ -1085,7 +1085,7 @@ const canAggregationNextPage = computed(() => {
 });
 
 // 切换到聚合统计预设分页大小
-const switchAggregationToPresetSize = (size: number) => {
+const switchAggregationToPresetSize = async (size: number) => {
   const state = currentAggregationState.value;
   state.pageSize = size;
   state.isCustomPageSize = false;
@@ -1095,10 +1095,17 @@ const switchAggregationToPresetSize = (size: number) => {
   const totalPages = Math.ceil(total / size);
   state.currentPage = totalPages > 0 ? Math.min(state.currentPage, totalPages - 1) : 0;
   state.pageInputValue = String(state.currentPage + 1);
+  // 保存到数据库
+  const configKeyMap: Record<IpAddressType, keyof Settings> = {
+    lan: 'aggregation_lan_page_size',
+    wan: 'aggregation_wan_page_size',
+    unknown: 'aggregation_unknown_page_size',
+  };
+  await setConfig(configKeyMap[activeAggregationTab.value], size);
 };
 
 // 处理聚合统计自定义分页大小变更
-const handleAggregationCustomPageSizeChange = () => {
+const handleAggregationCustomPageSizeChange = async () => {
   const state = currentAggregationState.value;
   const value = parseInt(state.customPageSize, 10);
   if (!isNaN(value) && value > 0) {
@@ -1109,6 +1116,13 @@ const handleAggregationCustomPageSizeChange = () => {
     const totalPages = Math.ceil(total / value);
     state.currentPage = totalPages > 0 ? Math.min(state.currentPage, totalPages - 1) : 0;
     state.pageInputValue = String(state.currentPage + 1);
+    // 保存到数据库
+    const configKeyMap: Record<IpAddressType, keyof Settings> = {
+      lan: 'aggregation_lan_page_size',
+      wan: 'aggregation_wan_page_size',
+      unknown: 'aggregation_unknown_page_size',
+    };
+    await setConfig(configKeyMap[activeAggregationTab.value], value);
   }
 };
 
@@ -1175,6 +1189,31 @@ watch(() => currentAggregationIps.value, () => {
       state.pageInputValue = String(newIndex + 1);
     }
   });
+}, { immediate: true });
+
+// 监听聚合统计分页大小设置变化，从外部更新时同步到组件
+watch(() => settings.aggregation_lan_page_size, (newValue) => {
+  if (newValue && newValue !== aggregationPageStates.lan.pageSize) {
+    aggregationPageStates.lan.pageSize = newValue;
+    aggregationPageStates.lan.isCustomPageSize = !aggregationPageSizeOptions.includes(newValue);
+    aggregationPageStates.lan.customPageSize = !aggregationPageSizeOptions.includes(newValue) ? String(newValue) : '';
+  }
+}, { immediate: true });
+
+watch(() => settings.aggregation_wan_page_size, (newValue) => {
+  if (newValue && newValue !== aggregationPageStates.wan.pageSize) {
+    aggregationPageStates.wan.pageSize = newValue;
+    aggregationPageStates.wan.isCustomPageSize = !aggregationPageSizeOptions.includes(newValue);
+    aggregationPageStates.wan.customPageSize = !aggregationPageSizeOptions.includes(newValue) ? String(newValue) : '';
+  }
+}, { immediate: true });
+
+watch(() => settings.aggregation_unknown_page_size, (newValue) => {
+  if (newValue && newValue !== aggregationPageStates.unknown.pageSize) {
+    aggregationPageStates.unknown.pageSize = newValue;
+    aggregationPageStates.unknown.isCustomPageSize = !aggregationPageSizeOptions.includes(newValue);
+    aggregationPageStates.unknown.customPageSize = !aggregationPageSizeOptions.includes(newValue) ? String(newValue) : '';
+  }
 }, { immediate: true });
 
 // 监听数据变化，仅处理页码越界的情况
