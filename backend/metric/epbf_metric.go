@@ -289,7 +289,6 @@ func (svc *EbpfNetTrafficService) Run(ctx context.Context) {
 		case <-gcTicker.C:
 			// 异步执行清理
 			go svc.cleanupExpiredFlows(objs, keyExpiredTime, lastSnapshots)
-
 		}
 	}
 }
@@ -341,7 +340,6 @@ func (svc *EbpfNetTrafficService) GetAggregationTrafficMetric() *model.Aggregati
 	svc.mutex.RLock()
 	defer svc.mutex.RUnlock()
 	for ip, value := range metricsMap {
-
 		IpType := model.IpAddressTypeWan
 		// 统计上传 (Source 是本地)
 		if svc.IsLanIp(ip) {
@@ -683,7 +681,6 @@ func IsUnknownIp(ip netip.Addr) bool {
 }
 
 func IsIgnoredAddr(ip netip.Addr) bool {
-
 	if !ip.IsValid() || ip.IsUnspecified() || ip.IsLoopback() {
 		return true
 	}

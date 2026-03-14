@@ -263,15 +263,12 @@ func ReadPrivateIpv4Addresses(runner CommandRunnerInterface) (cidrs []string) {
 			continue
 		}
 		cidrs = append(cidrs, ipv4Cidr)
-
 	}
 	return cidrs
-
 }
 
 // "result" must be not nil
 func readNetworkInterfaceIpAddress(runner CommandRunnerInterface, result model.StaticNetworkMetric) {
-
 	if result == nil {
 		return
 	}
@@ -455,7 +452,6 @@ func readDiskUsage(reader FsReaderInterface, metric model.StorageMetric) {
 }
 
 func readDiskIoStats(reader FsReaderInterface, metric model.StorageMetric, lastSnap model.DiskSnap, updateInterval uint) {
-
 	raw, err := reader.ReadFile(procPaths.StorageDeviceIo())
 	if err != nil {
 		return
@@ -676,7 +672,6 @@ func selectPrivateAddress(
 	}
 
 	return originConnectionSrcAddr, originConnectionSrcPort, originConnectionDstAddr, originConnectionDstPort
-
 }
 
 func ReadConnectionMetric(reader FsReaderInterface, metric *model.NetworkConnectionMetric, privateCidr []string) {
@@ -795,7 +790,6 @@ func ReadConnectionMetric(reader FsReaderInterface, metric *model.NetworkConnect
 }
 
 func ReadStaticSystemMetric(reader FsReaderInterface, runner CommandRunnerInterface) model.StaticSystemMetric {
-
 	os, err := reader.ReadFile(procPaths.SystemVersion())
 	if err != nil {
 		os = model.StringDefault

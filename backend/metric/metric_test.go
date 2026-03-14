@@ -58,7 +58,6 @@ func NewMockRunner(mockData string, mockError error, commands []string) *TestCom
 }
 
 func TestReadCpuTemperature(t *testing.T) {
-
 	testCases := []struct {
 		testName  string
 		readData  string
@@ -85,7 +84,6 @@ func TestReadCpuTemperature(t *testing.T) {
 			temperature, unit := readCpuTemperature(reader)
 			assert.Equal(t, testCase.expected, temperature)
 			assert.Equal(t, model.Celsius, unit)
-
 		})
 	}
 }
@@ -205,7 +203,6 @@ softirq 709050685 1337984 167961916 259144 400626814 18849 0 2523414 104303354 1
 			assert.Equal(t, testCase.expected4, err)
 		})
 	}
-
 }
 
 func TestReadLocalTimeZone(t *testing.T) {
@@ -271,7 +268,6 @@ config system
 }
 
 func TestSelectPrivateAddress(t *testing.T) {
-
 	privateCidr := []string{
 		"192.168.0.0/24",
 	}

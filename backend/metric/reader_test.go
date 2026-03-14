@@ -51,7 +51,6 @@ func TestReaderReadFile(t *testing.T) {
 	readResult, err = reader.ReadFile("/path/notExist")
 	assert.Error(t, err)
 	assert.Equal(t, "", readResult)
-
 }
 func TestReaderOpen(t *testing.T) {
 	testText := "hello world"
