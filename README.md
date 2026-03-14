@@ -20,7 +20,10 @@
 3. 使用文本编辑器打开服务文件,修改必要的"文件路径"或"监控端口等配置
 4. 给服务文件和二进制文件`chmod +x`权限,使用`/etc/init.d/diskio-api enable`使其服务开机自启,最后使用`/etc/init.d/diskio-api start`来启动服务
 
-## 工具要求
+
+## 项目开发
+
+### 相关工具依赖要求
 
 - linux >= 5.4 (for ebpf)
 - go >= 1.18
@@ -30,9 +33,20 @@
 - ebpf tool chains (clang + llvm + gcc)
 
 > [!WARNING]  
-> 项目后端仅支持linux发行版,并只优先适配openwrt,虽然go支持windows交叉编译linux二进制产物,但是不保证能在windows上编译成功
+> 项目后端仅支持linux发行版,并只优先适配openwrt
 
-## 编译方法
+### 安装开发环境或编译
+
+本项目使用了TaskFile来处理依赖环境安装和项目编译流程
+
+> [!WARNING]  
+> 目前`task install`使用了`apt`命令,所以`task install`命令仅支持Debian系发行版
+
+1. 请参考[TaskFile安装教程](https://taskfile.dev/docs/installation)安装TaskFile,或者使用`./scripts/install-taskfile.sh`安装TaskFile也可以,安装完毕后,使用`task -l`查看当前项目的TaskFile命令,没报错则说明TaskFile安装成功
+2. 运行`task install`命令即可一键安装依赖环境
+3. 运行`task build`命令即可一键编译项目(直接运行`task build`也会自动判断并安装依赖环境)
+
+### 手动安装开发环境和编译项目
 
 1. 在任意linux发行版上,clone本项目
 2. 后端编译需要[go编译器](https://golang.google.cn/dl/)和[goreleaser](https://goreleaser.com/install/#go-install),下载和安装教程请看对应官网
