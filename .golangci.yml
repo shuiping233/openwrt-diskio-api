@@ -1,7 +1,5 @@
 # yaml-language-server: $schema=https://golangci-lint.run/jsonschema/golangci.jsonschema.json
 
-version: "2"
-
 run:
   timeout: 5m
   # 允许并行运行
@@ -12,8 +10,8 @@ run:
 
 linters:
   # 注意：这里是顶级的 linters 配置
-  disable:
-    - all
+  # disable:
+  #   - all
   enable:
     - errcheck
     - gosimple
